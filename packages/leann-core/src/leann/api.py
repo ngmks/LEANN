@@ -118,6 +118,20 @@ class SearchResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class IncrementalAddContext:
+    """Prepared context for safe incremental add operations on an index."""
+
+    index_path: str
+    passages_file: Path
+    offsets_file: Path
+    vector_index_file: Path
+    embedding_model: str
+    embedding_mode: str
+    distance_metric: str
+    prepared_texts: Optional[list[str]] = None
+
+
 class PassageManager:
     def __init__(
         self, passage_sources: list[dict[str, Any]], metadata_file_path: Optional[str] = None
@@ -1167,6 +1181,130 @@ def incremental_add_texts(
         )
 
     return len(assigned_ids)
+
+
+def create_incremental_add_context(
+    index_path: str,
+    *,
+    # Optional embedding choices; if None will use meta
+    embedding_model: Optional[str] = None,
+    embedding_mode: Optional[str] = None,
+    # Optional data-to-text preparation in context
+    data_dir: Optional[str] = None,
+    required_exts: Optional[list[str]] = None,
+    chunk_size: int = 256,
+    chunk_overlap: int = 128,
+    max_items: int = -1,
+) -> IncrementalAddContext:
+    """Validate index and prepare context for repeated incremental adds.
+
+    Additionally, if data_dir is provided, this function will load documents,
+    chunk them to texts with the specified parameters, and store them in ctx.prepared_texts.
+    """
+    meta = _read_meta_file(index_path)
+    if meta.get("backend_name") != "hnsw":
+        raise RuntimeError("Incremental add is currently supported only for HNSW backend")
+    if meta.get("is_compact", True):
+        raise RuntimeError(
+            "Index is compact/pruned. Rebuild base with is_recompute=False and is_compact=False for incremental add."
+        )
+
+    passages_file, offsets_file, vector_index_file = _resolve_index_paths(index_path)
+    if not vector_index_file.exists():
+        raise FileNotFoundError(
+            f"Vector index file missing: {vector_index_file}. Build base first with LeannBuilder."
+        )
+
+    model_name = embedding_model or meta.get("embedding_model", "facebook/contriever")
+    mode_name = embedding_mode or meta.get("embedding_mode", "sentence-transformers")
+    distance_metric = meta.get("backend_kwargs", {}).get("distance_metric", "mips").lower()
+
+    prepared_texts: Optional[list[str]] = None
+    if data_dir is not None:
+        try:
+            from llama_index.core import SimpleDirectoryReader  # type: ignore
+            from llama_index.core.node_parser import SentenceSplitter  # type: ignore
+        except Exception as e:
+            raise RuntimeError(
+                "llama-index-core is required when using data_dir in create_incremental_add_context"
+            ) from e
+
+        reader_kwargs: dict[str, Any] = {"recursive": True, "encoding": "utf-8"}
+        if required_exts:
+            reader_kwargs["required_exts"] = required_exts
+        documents = SimpleDirectoryReader(data_dir, **reader_kwargs).load_data(show_progress=True)
+        if documents:
+            splitter = SentenceSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                separator=" ",
+                paragraph_separator="\n\n",
+            )
+            prepared_texts = []
+            for doc in documents:
+                try:
+                    nodes = splitter.get_nodes_from_documents([doc])
+                    if nodes:
+                        prepared_texts.extend([node.get_content() for node in nodes])
+                except Exception:
+                    content = doc.get_content()
+                    if content and content.strip():
+                        prepared_texts.append(content.strip())
+            if max_items > 0 and len(prepared_texts) > max_items:
+                prepared_texts = prepared_texts[:max_items]
+
+    return IncrementalAddContext(
+        index_path=index_path,
+        passages_file=passages_file,
+        offsets_file=offsets_file,
+        vector_index_file=vector_index_file,
+        embedding_model=model_name,
+        embedding_mode=mode_name,
+        distance_metric=distance_metric,
+        prepared_texts=prepared_texts,
+    )
+
+
+def incremental_add_texts_with_context(ctx: IncrementalAddContext, texts: list[str]) -> int:
+    """Incrementally add texts using a prepared context (no repeated validation)."""
+    if not texts:
+        return 0
+
+    # Append passages & offsets
+    _append_passages_and_update_offsets(ctx.passages_file, ctx.offsets_file, texts)
+
+    # Compute embeddings
+    embeddings = compute_embeddings(
+        texts,
+        model_name=ctx.embedding_model,
+        mode=ctx.embedding_mode,
+        use_server=False,
+        is_build=True,
+    )
+
+    # Normalize for cosine if needed
+    if ctx.distance_metric == "cosine":
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        norms[norms == 0] = 1
+        embeddings = embeddings / norms
+
+    # Load vector index and append
+    try:
+        from leann_backend_hnsw import faiss as hnsw_faiss  # type: ignore
+    except Exception as e:
+        raise RuntimeError(
+            "Failed to import leann_backend_hnsw.faiss. Ensure HNSW backend is installed."
+        ) from e
+
+    index = hnsw_faiss.read_index(str(ctx.vector_index_file), hnsw_faiss.IO_FLAG_MMAP)
+    if embeddings.dtype != np.float32:
+        embeddings = embeddings.astype(np.float32)
+    if not embeddings.flags.c_contiguous:
+        embeddings = np.ascontiguousarray(embeddings, dtype=np.float32)
+    index.add(embeddings.shape[0], hnsw_faiss.swig_ptr(embeddings))
+    hnsw_faiss.write_index(index, str(ctx.vector_index_file))
+
+    return embeddings.shape[0]
 
 
 def incremental_add_directory(

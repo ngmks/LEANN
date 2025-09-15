@@ -173,88 +173,41 @@ def add_incremental(
     index_path = index_dir_path / (index_name or "documents.leann")
 
     # If specified base doesn't exist, try to auto-detect an existing base
-    meta = None
     try:
-        meta = _read_meta(index_path)
+        _read_meta(index_path)
     except FileNotFoundError:
         auto_base = _autodetect_index_base(index_dir_path)
         if auto_base is not None:
             print(f"Auto-detected index base: {auto_base.name}")
             index_path = auto_base
-            meta = _read_meta(index_path)
+            _read_meta(index_path)
         else:
             raise FileNotFoundError(
                 f"No index metadata found for base '{index_path.name}'. Build base first with --build-base "
                 f"or provide --index-name to match an existing index (e.g., 'test_doc_files.leann')."
             )
 
-    passages_file, offsets_file, faiss_index_file = _index_files(index_path)
+    # Prepare validated context from core (checks backend/no-recompute and resolves embedding defaults)
+    from leann.api import create_incremental_add_context, incremental_add_texts_with_context
 
-    if meta.get("backend_name") != "hnsw":
-        raise RuntimeError("Incremental add is currently supported only for HNSW backend")
-    if meta.get("is_compact", True):
-        raise RuntimeError(
-            "Index is compact. Rebuild base with --no-recompute and --no-compact for incremental add."
-        )
-
-    # Ensure the vector index exists before appending passages
-    if not faiss_index_file.exists():
-        raise FileNotFoundError(
-            f"Vector index file missing: {faiss_index_file}. Build base first (use --build-base)."
-        )
-
-    # Resolve embedding config from meta if not provided
-    embedding_model or meta.get("embedding_model", "facebook/contriever")
-    embedding_mode or meta.get("embedding_mode", "sentence-transformers")
-
-    documents = _load_documents(add_dir, required_exts=file_types)
-    if not documents:
-        raise ValueError(f"No documents found in add_dir: {add_dir}")
-
-    from chunking import create_text_chunks
-
-    new_texts = create_text_chunks(
-        documents,
+    ctx = create_incremental_add_context(
+        str(index_path),
+        embedding_model=embedding_model,
+        embedding_mode=embedding_mode,
+        data_dir=add_dir,
+        required_exts=file_types,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        use_ast_chunking=False,
+        max_items=max_items,
     )
-    if max_items > 0 and len(new_texts) > max_items:
-        new_texts = new_texts[:max_items]
-        print(f"Limiting to {max_items} chunks (incremental)")
 
-    if not new_texts:
+    # Use prepared texts from context to perform the add
+    prepared_texts = ctx.prepared_texts or []
+    if not prepared_texts:
         print("No new chunks to add.")
         return str(index_path)
 
-    # Load and extend passages + offsets
-    offset_map = _load_offset_map(offsets_file)
-    start_id_int = _next_numeric_id(list(offset_map.keys()))
-    next_id = start_id_int
-
-    # Append to passages.jsonl and collect offsets
-    print("Appending passages and updating offsets...")
-    with open(passages_file, "a", encoding="utf-8") as f:
-        for text in new_texts:
-            offset = f.tell()
-            str_id = str(next_id)
-            json.dump({"id": str_id, "text": text, "metadata": {}}, f, ensure_ascii=False)
-            f.write("\n")
-            offset_map[str_id] = offset
-            next_id += 1
-
-    with open(offsets_file, "wb") as f:
-        pickle.dump(offset_map, f)
-
-    # Compute embeddings for new texts
-    print("Computing embeddings for incremental chunks...")
-    from leann.api import incremental_add_texts
-
-    # Let core handle embeddings and vector index update
-    added = incremental_add_texts(
-        str(index_path),
-        new_texts,
-    )
+    added = incremental_add_texts_with_context(ctx, prepared_texts)
 
     print(f"Incremental add completed. Added {added} chunks. Index: {index_path}")
     return str(index_path)
