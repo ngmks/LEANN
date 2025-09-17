@@ -179,7 +179,13 @@ def create_text_chunks(
 
     local_code_extensions = CODE_EXTENSIONS.copy()
     if code_file_extensions:
-        ext_mapping = {".py": "python", ".java": "java", ".cs": "c_sharp", ".ts": "typescript", ".tsx": "typescript"}
+        ext_mapping = {
+            ".py": "python",
+            ".java": "java",
+            ".cs": "c_sharp",
+            ".ts": "typescript",
+            ".tsx": "typescript",
+        }
         for ext in code_file_extensions:
             if ext.lower() not in local_code_extensions:
                 if ext.lower() in ext_mapping:
@@ -193,12 +199,16 @@ def create_text_chunks(
         if code_docs:
             try:
                 all_chunks.extend(
-                    create_ast_chunks(code_docs, max_chunk_size=ast_chunk_size, chunk_overlap=ast_chunk_overlap)
+                    create_ast_chunks(
+                        code_docs, max_chunk_size=ast_chunk_size, chunk_overlap=ast_chunk_overlap
+                    )
                 )
             except Exception as e:
                 logger.error(f"AST chunking failed: {e}")
                 if ast_fallback_traditional:
-                    all_chunks.extend(create_traditional_chunks(code_docs, chunk_size, chunk_overlap))
+                    all_chunks.extend(
+                        create_traditional_chunks(code_docs, chunk_size, chunk_overlap)
+                    )
                 else:
                     raise
         if text_docs:
