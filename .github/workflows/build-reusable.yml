@@ -302,10 +302,12 @@ jobs:
 
       - name: Install built packages for testing
         run: |
-          # Create a virtual environment using the exact interpreter configured by setup-python
-          PYTHON_BIN=$(python -c "import sys; print(sys.executable)")
-          uv venv --python "$PYTHON_BIN"
+          # Create a virtual environment using the matrix interpreter
+          python -m venv .venv
           source .venv/bin/activate || source .venv/Scripts/activate
+
+          # Make sure pip tooling is up to date
+          python -m pip install --upgrade pip
 
           # Install test tools only first, without including the project itself
           uv sync --only-group test
@@ -318,7 +320,19 @@ jobs:
             uv pip install packages/leann-core/dist/*.tar.gz
           fi
 
+          # Derive ABI tag for this interpreter
           PY_TAG=$(python -c "import sys; print(f'cp{sys.version_info[0]}{sys.version_info[1]}')")
+
+          # Ensure macOS builds use a deployment target compatible with LAPACK symbols when compiling from source
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            if [[ "${{ matrix.os }}" == "macos-13" ]]; then
+              export MACOSX_DEPLOYMENT_TARGET=13.3
+            elif [[ "${{ matrix.os }}" == "macos-14" ]]; then
+              export MACOSX_DEPLOYMENT_TARGET=14.0
+            elif [[ "${{ matrix.os }}" == "macos-15" ]]; then
+              export MACOSX_DEPLOYMENT_TARGET=15.0
+            fi
+          fi
 
           HNSW_WHL=$(find packages/leann-backend-hnsw/dist -maxdepth 1 -name "*-${PY_TAG}-*.whl" -print -quit)
           if [[ -z "$HNSW_WHL" ]]; then
