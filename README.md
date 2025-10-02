@@ -176,7 +176,7 @@ response = chat.ask("How much storage does LEANN save?", top_k=1)
 
 ## RAG on Everything!
 
-LEANN supports RAG on various data sources including documents (`.pdf`, `.txt`, `.md`), Apple Mail, Google Search History, WeChat, ChatGPT conversations, Claude conversations, and more.
+LEANN supports RAG on various data sources including documents (`.pdf`, `.txt`, `.md`), Apple Mail, Google Search History, WeChat, ChatGPT conversations, Claude conversations, iMessage conversations, and more.
 
 
 
@@ -622,6 +622,90 @@ Once your Claude conversations are indexed, you can search with queries like:
 - "What debugging advice did Claude give me?"
 - "Search for conversations about data structures"
 - "Find Claude's recommendations for learning resources"
+
+</details>
+
+### 💬 iMessage History: Your Personal Conversation Archive!
+
+Transform your iMessage conversations into a searchable knowledge base! Search through all your text messages, group chats, and conversations with friends, family, and colleagues.
+
+```bash
+python -m apps.imessage_rag --query "What did we discuss about the weekend plans?"
+```
+
+**Unlock your message history.** Never lose track of important conversations, shared links, or memorable moments from your iMessage history.
+
+<details>
+<summary><strong>📋 Click to expand: How to Access iMessage Data</strong></summary>
+
+**iMessage data location:**
+
+iMessage conversations are stored in a SQLite database on your Mac at:
+```
+~/Library/Messages/chat.db
+```
+
+**Important setup requirements:**
+
+1. **Grant Full Disk Access** to your terminal or IDE:
+   - Open **System Preferences** → **Security & Privacy** → **Privacy**
+   - Select **Full Disk Access** from the left sidebar
+   - Click the **+** button and add your terminal app (Terminal, iTerm2) or IDE (VS Code, etc.)
+   - Restart your terminal/IDE after granting access
+
+2. **Alternative: Use a backup database**
+   - If you have Time Machine backups or manual copies of the database
+   - Use `--db-path` to specify a custom location
+
+**Supported formats:**
+- Direct access to `~/Library/Messages/chat.db` (default)
+- Custom database path with `--db-path`
+- Works with backup copies of the database
+
+</details>
+
+<details>
+<summary><strong>📋 Click to expand: iMessage-Specific Arguments</strong></summary>
+
+#### Parameters
+```bash
+--db-path PATH                    # Path to chat.db file (default: ~/Library/Messages/chat.db)
+--concatenate-conversations       # Group messages by conversation (default: True)
+--no-concatenate-conversations    # Process each message individually
+--chunk-size N                    # Text chunk size (default: 1000)
+--chunk-overlap N                 # Overlap between chunks (default: 200)
+```
+
+#### Example Commands
+```bash
+# Basic usage (requires Full Disk Access)
+python -m apps.imessage_rag
+
+# Search with specific query
+python -m apps.imessage_rag --query "family dinner plans"
+
+# Use custom database path
+python -m apps.imessage_rag --db-path /path/to/backup/chat.db
+
+# Process individual messages instead of conversations
+python -m apps.imessage_rag --no-concatenate-conversations
+
+# Limit processing for testing
+python -m apps.imessage_rag --max-items 100 --query "weekend"
+```
+
+</details>
+
+<details>
+<summary><strong>💡 Click to expand: Example queries you can try</strong></summary>
+
+Once your iMessage conversations are indexed, you can search with queries like:
+- "What did we discuss about vacation plans?"
+- "Find messages about restaurant recommendations"
+- "Show me conversations with John about the project"
+- "Search for shared links about technology"
+- "Find group chat discussions about weekend events"
+- "What did mom say about the family gathering?"
 
 </details>
 
