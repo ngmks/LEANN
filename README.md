@@ -1097,7 +1097,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 Core Contributors: [Yichuan Wang](https://yichuan-w.github.io/) & [Zhifei Li](https://github.com/andylizf).
 
-Active Contributors: [Gabriel Dehan](https://github.com/gabriel-dehan)
+Active Contributors: [Gabriel Dehan](https://github.com/gabriel-dehan), [ASuresh0524](https://github.com/ASuresh0524)
 
 
 We welcome more contributors! Feel free to open issues or submit PRs.
