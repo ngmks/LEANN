@@ -199,7 +199,9 @@ def compute_embeddings_sentence_transformers(
             logger.info("Model loaded successfully! (local + optimized)")
         except TypeError as e:
             if "model_kwargs" in str(e) or "tokenizer_kwargs" in str(e):
-                logger.warning(f"Advanced parameters not supported ({e}), using basic initialization...")
+                logger.warning(
+                    f"Advanced parameters not supported ({e}), using basic initialization..."
+                )
                 # Fallback to basic initialization for older versions
                 try:
                     model = SentenceTransformer(
@@ -237,7 +239,9 @@ def compute_embeddings_sentence_transformers(
                 logger.info("Model loaded successfully! (network + optimized)")
             except TypeError as e2:
                 if "model_kwargs" in str(e2) or "tokenizer_kwargs" in str(e2):
-                    logger.warning(f"Advanced parameters not supported ({e2}), using basic network loading...")
+                    logger.warning(
+                        f"Advanced parameters not supported ({e2}), using basic network loading..."
+                    )
                     model = SentenceTransformer(
                         model_name,
                         device=device,
