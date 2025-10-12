@@ -1,6 +1,6 @@
 # Slack Integration Setup Guide
 
-This guide provides step-by-step instructions for setting up Slack integration with LEANN. 
+This guide provides step-by-step instructions for setting up Slack integration with LEANN.
 
 ## Overview
 
@@ -138,7 +138,7 @@ Authenticated with Slack.
 Listing available MCP tools...
 Found 5 available tools:
   1. channels_list - Get list of channels
-  2. conversations_add_message - Add messages to channels  
+  2. conversations_add_message - Add messages to channels
   3. conversations_history - Get messages from channels
   4. conversations_replies - Get thread messages
   5. conversations_search_messages - Search messages with filters
@@ -156,7 +156,7 @@ The following screenshot shows a successful integration with VS Code displaying 
 ### Key Success Indicators
 
 - **Authentication Success**: Connected to your Slack workspace
-- **Tool Availability**: 5 MCP tools ready for interaction  
+- **Tool Availability**: 5 MCP tools ready for interaction
 - **Data Access**: Retrieved channel directory with member counts and purposes
 - **Comprehensive Coverage**: Access to multiple channels including specialized research groups
 
