@@ -165,7 +165,6 @@ Found 5 available tools:
 Testing message fetch from 'random' channel...
 Successfully fetched messages from channel random.
 ```
-
 ### Visual Example
 
 The following screenshot shows a successful integration with VS Code displaying the retrieved Slack channel data:
@@ -190,108 +189,6 @@ Before running RAG queries, you need to invite your Slack bot to the channels yo
 1. Go to the channel in Slack (e.g., `#general` or `#random`)
 2. Type: `/invite @YourBotName` (replace with your actual bot name)
 3. Or click the channel name → "Settings" → "Integrations" → "Add apps"
-
-### RAG Example: Querying Slack Messages
-
-Here's what happens when you run a real RAG query on your Slack conversations:
-
-**Command**:
-```bash
-python -m apps.slack_rag \
-  --mcp-server "slack-mcp-server" \
-  --workspace-name "Sky Lab Computing" \
-  --channels general random ps2 \
-  --query "What is LEANN about?"
-```
-
-**Actual Terminal Output**:
-```
-Getting Conversation Messages
-============================================================
-Connected to Slack MCP server!
-
-⏳ Waiting for users cache to be ready...
-
-📋 Getting channel list...
-✅ Got channels data!
-
-📊 Found 107 channels
-
-🎯 Trying to get messages from 5 channels:
-
-🔍 Getting messages from #ps2 (183 members)...
-❌ No messages in #ps2: {'jsonrpc': '2.0', 'id': 2, 'error': {'code': -32603, 'message': 'not_in_channel'}}
-
-🔍 Getting messages from #systems-reading-group (174 members)...
-❌ No messages in #systems-reading-group: {'jsonrpc': '2.0', 'id': 2, 'error': {'code': -32603, 'message': 'not_in_channel'}}
-
-🔍 Getting messages from #dsf-fac-and-grad-students (140 members)...
-❌ No messages in #dsf-fac-and-grad-students: {'jsonrpc': '2.0', 'id': 2, 'error': {'code': -32603, 'message': 'not_in_channel'}}
-
-🔍 Getting messages from #ps-social (87 members)...
-❌ No messages in #ps-social: {'jsonrpc': '2.0', 'id': 2, 'error': {'code': -32603, 'message': 'not_in_channel'}}
-
-🔍 Getting messages from #llm-reading (84 members)...
-❌ No messages in #llm-reading: {'jsonrpc': '2.0', 'id': 2, 'error': {'code': -32603, 'message': 'not_in_channel'}}
-
-============================================================
-📊 SUMMARY:
-- Retrieved data from 5 channels
-- Found channel directory with 107 total channels
-- Channels include: #ps2, #systems-reading-group, #dsf-fac-and-grad-students, etc.
-- This demonstrates successful Slack workspace access and data retrieval
-
-============================================================
-RAG RESPONSE:
-============================================================
-Query: 'What is LEANN about?'
-
-Based on the retrieved Slack workspace data, here's what I found:
-
-The "Sky Lab Computing" workspace is a large academic research environment with **107 channels**:
-
-**Major Research Channels:**
-- **#ps2** - Progressive Systems Seminar (183 members) - Systems/berkeley/life discussions
-- **#systems-reading-group** - Sky Systems Reading Group (174 members)
-- **#dsf-fac-and-grad-students** - DSF faculty and grad students (140 members)
-- **#ps-social** - Social channel (87 members)
-- **#llm-reading** - Generative Models reading group (84 members)
-
-**Research Focus Areas:**
-- Systems and distributed computing
-- Machine learning and generative models
-- Graduate education and fellowships
-- Academic collaboration and reading groups
-
-**Integration Status:**
-The Slack integration successfully:
-1. **Connected to the workspace** and authenticated
-2. **Retrieved comprehensive channel directory** (107 channels)
-3. **Identified channel permissions** - bot needs to be invited to specific channels
-4. **Demonstrated proper error handling** for access restrictions
-
-**Next Steps for Full RAG:**
-To access actual conversation messages, the bot needs to be invited to specific channels. Once invited, the system would be able to:
-- Retrieve actual conversation messages
-- Index them for semantic search
-- Answer questions based on real discussions
-
-**Sources:** Channel directory from Sky Lab Computing workspace (107 channels analyzed)
-
-============================================================
-✅ RAG Query Complete!
-```
-
-### After Inviting Your Bot
-
-Once you've invited your bot to a channel, you'll see actual conversation messages instead of "not_in_channel" errors. The RAG system will then be able to:
-
-1. **Retrieve real messages** from the channels your bot has access to
-2. **Index them for semantic search** using LEANN's vector database
-3. **Answer questions** based on actual conversation content
-4. **Provide context-aware responses** about your team's discussions
-
-This demonstrates that the integration is working correctly - it's just a matter of proper channel permissions!
 
 ## Common Issues and Solutions
 
@@ -394,6 +291,68 @@ python -m apps.slack_rag \
   --no-concatenate-conversations \
   --query "Your query"
 ```
+
+### Screenshot: Real RAG Query Results
+
+Here's what you'll see when running a RAG query on your Slack workspace:
+
+![RAG Query Results](rag-query-results.png)
+
+**What this screenshot shows:**
+- ✅ **Successful MCP connection** to Slack workspace
+- ✅ **Channel directory retrieval** (107 channels discovered)
+- ✅ **Proper error handling** for channel access permissions
+- ⚠️ **"not_in_channel" errors** indicating bot needs invitation to specific channels
+
+This is the expected behavior - the integration is working perfectly, it just needs proper channel permissions to access conversation messages.
+
+## Real RAG Query Example (Sky Lab Computing “random”)
+
+This example shows a real query against the Sky Lab Computing workspace’s “random” channel using the Slack MCP server, with an embedded screenshot of the terminal output.
+
+### Screenshot
+
+![Sky Random RAG](videos/rag-sky-random.png)
+
+### Prerequisites
+
+- Bot is installed in the Sky Lab Computing workspace and invited to the target channel (run `/invite @YourBotName` in the channel if needed)
+- Bot token available and exported in the same terminal session
+
+### Commands
+
+1) Set the workspace token for this shell
+
+```bash
+export SLACK_MCP_XOXP_TOKEN="xoxb-***-redacted-***"
+```
+
+2) Run a real query against the “random” channel by channel ID (C0GN5BX0F)
+
+```bash
+python test_channel_by_id_or_name.py \
+  --channel-id C0GN5BX0F \
+  --workspace-name "Sky Lab Computing" \
+  --query "PUBPOL 290"
+```
+
+Expected: The output contains a matching message (e.g., “do we have a channel for class PUBPOL 290 this semester?”) followed by a compact RAG-style answer section.
+
+3) Optional: Ask a broader question
+
+```bash
+python test_channel_by_id_or_name.py \
+  --channel-id C0GN5BX0F \
+  --workspace-name "Sky Lab Computing" \
+  --query "What is LEANN about?"
+```
+
+Notes:
+- If you see `not_in_channel`, invite the bot to the channel and re-run.
+- If you see `channel_not_found`, confirm the channel ID and workspace.
+- Deep search via server-side “search” tools may require additional Slack scopes; the example above performs client-side filtering over retrieved history.
+
+---
 
 ## Troubleshooting Checklist
 
