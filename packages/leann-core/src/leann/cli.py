@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import time
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -1191,6 +1192,7 @@ Examples:
                 for doc in other_docs:
                     file_path = doc.metadata.get("file_path", "")
                     if file_filter(file_path):
+                        doc.metadata["source"] = file_path
                         filtered_docs.append(doc)
 
                 documents.extend(filtered_docs)
@@ -1554,6 +1556,7 @@ Examples:
                     print(f"   🕑 Modified: {result.metadata['last_modified_date']}")
 
             print(f"   {result.text[:200]}...")
+            print(f"   Source: {result.metadata.get('source', '')}")
             print()
 
     async def ask_questions(self, args):
@@ -1585,6 +1588,7 @@ Examples:
             llm_kwargs["thinking_budget"] = args.thinking_budget
 
         def _ask_once(prompt: str) -> None:
+            query_start_time = time.time()
             response = chat.ask(
                 prompt,
                 top_k=args.top_k,
@@ -1595,7 +1599,9 @@ Examples:
                 pruning_strategy=args.pruning_strategy,
                 llm_kwargs=llm_kwargs,
             )
+            query_completion_time = time.time() - query_start_time
             print(f"LEANN: {response}")
+            print(f"The query took {query_completion_time:.3f} seconds to finish")
 
         initial_query = (args.query or "").strip()
 
