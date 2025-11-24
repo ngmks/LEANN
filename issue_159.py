@@ -28,7 +28,7 @@ def generate_test_data(num_chunks=90000, chunk_size=2000):
     # 90K chunks * 2000 chars ≈ 180MB
     chunks = []
     base_text = (
-        "这是一个测试文档。LEANN是一个创新的向量数据库，通过图基选择性重计算实现97%的存储节省。"
+        "这是一个测试文档。LEANN是一个创新的向量数据库, 通过图基选择性重计算实现97%的存储节省。"
     )
 
     for i in range(num_chunks):
