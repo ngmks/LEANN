@@ -97,21 +97,23 @@ def _natural_sort_key(name: str) -> int:
     return int(m.group()) if m else 0
 
 
-def _load_images_from_dir(pages_dir: str, recursive: bool = False) -> tuple[list[str], list[Image.Image]]:
+def _load_images_from_dir(
+    pages_dir: str, recursive: bool = False
+) -> tuple[list[str], list[Image.Image]]:
     """
     Load images from a directory.
-    
+
     Args:
         pages_dir: Directory path containing images
         recursive: If True, recursively search subdirectories (default: False)
-    
+
     Returns:
         Tuple of (filepaths, images)
     """
-    
+
     # Supported image extensions
     extensions = ("*.png", "*.jpg", "*.jpeg", "*.PNG", "*.JPG", "*.JPEG", "*.webp", "*.WEBP")
-    
+
     if recursive:
         # Recursive search
         filepaths = []
@@ -124,31 +126,33 @@ def _load_images_from_dir(pages_dir: str, recursive: bool = False) -> tuple[list
         for ext in extensions:
             pattern = os.path.join(pages_dir, ext)
             filepaths.extend(glob.glob(pattern))
-    
+
     # Sort files naturally
     filepaths = sorted(filepaths, key=lambda x: _natural_sort_key(os.path.basename(x)))
-    
+
     # Load images with error handling
     images = []
     valid_filepaths = []
     failed_count = 0
-    
+
     for filepath in filepaths:
         try:
             img = Image.open(filepath)
             # Convert to RGB if necessary (handles RGBA, P, etc.)
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
+            if img.mode != "RGB":
+                img = img.convert("RGB")
             images.append(img)
             valid_filepaths.append(filepath)
         except Exception as e:
             failed_count += 1
             print(f"Warning: Failed to load image {filepath}: {e}")
             continue
-    
+
     if failed_count > 0:
-        print(f"Warning: Failed to load {failed_count} image(s) out of {len(filepaths)} total files")
-    
+        print(
+            f"Warning: Failed to load {failed_count} image(s) out of {len(filepaths)} total files"
+        )
+
     return valid_filepaths, images
 
 
