@@ -60,20 +60,6 @@ python -m apps.colqwen_rag ask my_index --interactive
 - `help`: Show available commands
 - `quit`/`exit`/`q`: Exit interactive mode
 
-## 🧪 Test & Reproduce Results
-
-Run the reproduction test for issue #119:
-```bash
-python test_colqwen_reproduction.py
-```
-
-This will:
-1. ✅ Check dependencies
-2. 📥 Download sample PDF (Attention Is All You Need paper)
-3. 🏗️ Build test index
-4. 🔍 Run sample queries
-5. 📊 Show how to generate similarity maps
-
 ## 🎨 Advanced: Similarity Maps
 
 For visual similarity analysis, use the existing advanced script:
