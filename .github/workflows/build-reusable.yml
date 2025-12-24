@@ -70,15 +70,8 @@ jobs:
             python: '3.12'
           - os: macos-15
             python: '3.13'
-          # Intel Mac builds (x86_64) - replaces deprecated macos-13
-          - os: macos-15-large
-            python: '3.10'
-          - os: macos-15-large
-            python: '3.11'
-          - os: macos-15-large
-            python: '3.12'
-          - os: macos-15-large
-            python: '3.13'
+          # Note: Intel Mac (x86_64) builds removed - macos-13 deprecated by GitHub,
+          # macos-15-large requires paid plan. Intel users can build from source.
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -198,11 +191,7 @@ jobs:
             export CC=clang
             export CXX=clang++
             # Set deployment target based on runner
-            # macos-15-large is Intel x86_64, target 13.0 for backward compatibility
-            # macos-14/15 are arm64, target their respective versions
-            if [[ "${{ matrix.os }}" == "macos-15-large" ]]; then
-              export MACOSX_DEPLOYMENT_TARGET=13.0
-            elif [[ "${{ matrix.os }}" == macos-14* ]]; then
+            if [[ "${{ matrix.os }}" == macos-14* ]]; then
               export MACOSX_DEPLOYMENT_TARGET=14.0
             elif [[ "${{ matrix.os }}" == macos-15* ]]; then
               export MACOSX_DEPLOYMENT_TARGET=15.0
@@ -220,11 +209,7 @@ jobs:
             export CC=clang
             export CXX=clang++
             # Set deployment target based on runner
-            # macos-15-large is Intel x86_64, target 13.3 for backward compatibility (DiskANN needs 13.3+)
-            # macos-14/15 are arm64, target their respective versions
-            if [[ "${{ matrix.os }}" == "macos-15-large" ]]; then
-              export MACOSX_DEPLOYMENT_TARGET=13.3
-            elif [[ "${{ matrix.os }}" == macos-14* ]]; then
+            if [[ "${{ matrix.os }}" == macos-14* ]]; then
               export MACOSX_DEPLOYMENT_TARGET=14.0
             elif [[ "${{ matrix.os }}" == macos-15* ]]; then
               export MACOSX_DEPLOYMENT_TARGET=15.0
@@ -265,11 +250,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           # Determine deployment target based on runner OS
-          # macos-15-large is Intel x86_64, target 13.x for backward compatibility
-          if [[ "${{ matrix.os }}" == "macos-15-large" ]]; then
-            HNSW_TARGET="13.0"
-            DISKANN_TARGET="13.3"
-          elif [[ "${{ matrix.os }}" == macos-14* ]]; then
+          if [[ "${{ matrix.os }}" == macos-14* ]]; then
             HNSW_TARGET="14.0"
             DISKANN_TARGET="14.0"
           elif [[ "${{ matrix.os }}" == macos-15* ]]; then
@@ -330,9 +311,7 @@ jobs:
           PY_TAG=$($UV_PY -c "import sys; print(f'cp{sys.version_info[0]}{sys.version_info[1]}')")
 
           if [[ "$RUNNER_OS" == "macOS" ]]; then
-            if [[ "${{ matrix.os }}" == "macos-15-large" ]]; then
-              export MACOSX_DEPLOYMENT_TARGET=13.3
-            elif [[ "${{ matrix.os }}" == macos-14* ]]; then
+            if [[ "${{ matrix.os }}" == macos-14* ]]; then
               export MACOSX_DEPLOYMENT_TARGET=14.0
             elif [[ "${{ matrix.os }}" == macos-15* ]]; then
               export MACOSX_DEPLOYMENT_TARGET=15.0
