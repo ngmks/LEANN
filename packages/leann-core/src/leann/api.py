@@ -865,6 +865,15 @@ class LeannBuilder:
 
 class LeannSearcher:
     def __init__(self, index_path: str, enable_warmup: bool = False, **backend_kwargs):
+        """Initialize a LeannSearcher for searching an existing index.
+
+        Args:
+            index_path: Path to the .leann index file
+            enable_warmup: If True, pre-load the embedding model on initialization
+                          for faster first search. This adds initialization time
+                          but reduces latency on the first search query.
+            **backend_kwargs: Additional arguments passed to the backend searcher
+        """
         # Fix path resolution for Colab and other environments
         if not Path(index_path).is_absolute():
             index_path = str(Path(index_path).resolve())
@@ -902,6 +911,12 @@ class LeannSearcher:
         self.backend_impl: LeannBackendSearcherInterface = backend_factory.searcher(
             index_path, **final_kwargs
         )
+
+        # Auto-warmup if requested - this pre-loads the embedding model
+        # to avoid cold-start latency on the first search
+        self._warmup_enabled = enable_warmup
+        if enable_warmup:
+            self.warmup()
 
     def search(
         self,
@@ -1164,6 +1179,60 @@ class LeannSearcher:
 
         matches.sort(key=lambda x: x.score, reverse=True)
         return matches[:top_k]
+
+    def warmup(self, port: int = 5557) -> float:
+        """Pre-warm the embedding server and model for faster subsequent searches.
+
+        This method starts the embedding server (if not already running) and
+        ensures the embedding model is loaded and cached. Call this before
+        your first search to avoid cold-start latency.
+
+        Args:
+            port: ZMQ port for the embedding server (default: 5557)
+
+        Returns:
+            Time taken for warmup in seconds
+
+        Example:
+            >>> searcher = LeannSearcher("path/to/index.leann")
+            >>> warmup_time = searcher.warmup()
+            >>> print(f"Warmup completed in {warmup_time:.2f}s")
+            >>> # Subsequent searches will be faster
+            >>> results = searcher.search("my query")
+        """
+        import time
+
+        start_time = time.time()
+        logger.info("Starting LeannSearcher warmup...")
+
+        try:
+            # Start the embedding server with warmup enabled
+            # This triggers model loading in the server process
+            zmq_port = self.backend_impl._ensure_server_running(
+                self.meta_path_str,
+                port=port,
+                enable_warmup=True,
+            )
+
+            # Optionally, do a dummy query to ensure everything is fully warmed up
+            # This tests the full path including ZMQ communication
+            try:
+                _ = self.backend_impl.compute_query_embedding(
+                    "warmup test query",
+                    use_server_if_available=True,
+                    zmq_port=zmq_port,
+                )
+            except Exception as e:
+                logger.warning(f"Warmup query failed (non-fatal): {e}")
+
+            warmup_time = time.time() - start_time
+            logger.info(f"LeannSearcher warmup completed in {warmup_time:.2f}s")
+            return warmup_time
+
+        except Exception as e:
+            warmup_time = time.time() - start_time
+            logger.warning(f"Warmup partially failed after {warmup_time:.2f}s: {e}")
+            return warmup_time
 
     def cleanup(self):
         """Explicitly cleanup embedding server resources.
