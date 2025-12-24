@@ -113,7 +113,8 @@ def load_vidore_v2_data(
                 # Try to get a sample to see actual language values
                 try:
                     sample_ds = cast(
-                        Dataset, load_dataset(dataset_path, "queries", split=split, revision=revision)
+                        Dataset,
+                        load_dataset(dataset_path, "queries", split=split, revision=revision),
                     )
                     if len(sample_ds) > 0 and "language" in sample_ds.column_names:
                         sample_langs = set(sample_ds["language"])

@@ -314,7 +314,9 @@ class WeChatHistoryReader(BaseReader):
 
         return concatenated_groups
 
-    def _create_concatenated_content(self, message_group: dict, contact_name: str) -> tuple[str, str]:
+    def _create_concatenated_content(
+        self, message_group: dict, contact_name: str
+    ) -> tuple[str, str]:
         """
         Create concatenated content from a group of messages.
 

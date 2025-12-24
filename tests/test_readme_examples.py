@@ -98,7 +98,9 @@ def test_backend_options():
     with tempfile.TemporaryDirectory() as temp_dir:
         # Use smaller model in CI to avoid memory issues
         is_ci = os.environ.get("CI") == "true"
-        embedding_model = "sentence-transformers/all-MiniLM-L6-v2" if is_ci else "facebook/contriever"
+        embedding_model = (
+            "sentence-transformers/all-MiniLM-L6-v2" if is_ci else "facebook/contriever"
+        )
         dimensions = 384 if is_ci else None
 
         # Test HNSW backend (as shown in README)
