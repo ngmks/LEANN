@@ -8,10 +8,8 @@ These tests verify that:
 """
 
 import os
-import tempfile
 import time
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -169,8 +167,9 @@ class TestEmbeddingServerWarmup:
 
     def test_hnsw_server_accepts_warmup_param(self):
         """Test that HNSW embedding server accepts enable_warmup parameter."""
-        from leann_backend_hnsw.hnsw_embedding_server import create_hnsw_embedding_server
         import inspect
+
+        from leann_backend_hnsw.hnsw_embedding_server import create_hnsw_embedding_server
 
         sig = inspect.signature(create_hnsw_embedding_server)
         params = sig.parameters
@@ -179,10 +178,11 @@ class TestEmbeddingServerWarmup:
 
     def test_diskann_server_accepts_warmup_param(self):
         """Test that DiskANN embedding server accepts enable_warmup parameter."""
+        import inspect
+
         from leann_backend_diskann.diskann_embedding_server import (
             create_diskann_embedding_server,
         )
-        import inspect
 
         sig = inspect.signature(create_diskann_embedding_server)
         params = sig.parameters
