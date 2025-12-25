@@ -49,6 +49,63 @@ def autodiscover_backends():
     # print("INFO: Backend auto-discovery finished.")
 
 
+def _has_app_indexes_limited(root: Path, max_depth: int = 3) -> bool:
+    """Check if directory contains app-format indexes with limited depth search.
+
+    Skips common large directories that shouldn't contain LEANN indexes.
+    """
+    skip_dirs = {
+        ".git",
+        ".svn",
+        ".hg",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".env",
+        "env",
+        ".tox",
+        ".nox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".eggs",
+        ".cache",
+        ".npm",
+        ".yarn",
+        "vendor",
+        "Pods",
+        ".gradle",
+        "target",
+    }
+
+    def should_skip(dir_name: str) -> bool:
+        if dir_name in skip_dirs:
+            return True
+        if dir_name.startswith(".") and dir_name != ".leann":
+            return True
+        return False
+
+    def search_dir(path: Path, current_depth: int) -> bool:
+        if current_depth > max_depth:
+            return False
+
+        try:
+            for item in path.iterdir():
+                if item.is_file() and item.name.endswith(".leann.meta.json"):
+                    return True
+                elif item.is_dir() and not should_skip(item.name):
+                    if search_dir(item, current_depth + 1):
+                        return True
+        except (PermissionError, OSError):
+            pass
+        return False
+
+    return search_dir(root, 0)
+
+
 def register_project_directory(project_dir: Optional[Union[str, Path]] = None):
     """
     Register a project directory in the global LEANN registry.
@@ -65,8 +122,9 @@ def register_project_directory(project_dir: Optional[Union[str, Path]] = None):
 
     # Only register directories that have some kind of LEANN content
     # Either .leann/indexes/ (CLI format) or *.leann.meta.json files (apps format)
+    # Use limited-depth search to avoid scanning large directories like $HOME
     has_cli_indexes = (project_dir / ".leann" / "indexes").exists()
-    has_app_indexes = any(project_dir.rglob("*.leann.meta.json"))
+    has_app_indexes = _has_app_indexes_limited(project_dir, max_depth=3)
 
     if not (has_cli_indexes or has_app_indexes):
         # Don't register if there are no LEANN indexes

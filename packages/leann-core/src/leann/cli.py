@@ -404,6 +404,68 @@ Examples:
             absolute_path = Path(str(file_path))
         return gitignore_matches(absolute_path.as_posix())
 
+    def _find_meta_files_limited(
+        self, root: Path, max_depth: int = 3, pattern: str = "*.leann.meta.json"
+    ):
+        """Find meta files with limited depth to avoid scanning large directories.
+
+        Skips common large directories that shouldn't contain LEANN indexes.
+        """
+        # Directories to skip - these are typically large and won't contain user indexes
+        skip_dirs = {
+            ".git",
+            ".svn",
+            ".hg",
+            "node_modules",
+            "__pycache__",
+            ".venv",
+            "venv",
+            ".env",
+            "env",
+            ".tox",
+            ".nox",
+            ".mypy_cache",
+            ".pytest_cache",
+            ".ruff_cache",
+            "dist",
+            "build",
+            ".eggs",
+            "*.egg-info",
+            ".cache",
+            ".npm",
+            ".yarn",
+            "vendor",
+            "Pods",
+            ".gradle",
+            "target",
+        }
+
+        def should_skip(dir_name: str) -> bool:
+            """Check if directory should be skipped."""
+            if dir_name in skip_dirs:
+                return True
+            # Skip hidden directories (except .leann which we want)
+            if dir_name.startswith(".") and dir_name != ".leann":
+                return True
+            return False
+
+        def search_dir(path: Path, current_depth: int):
+            """Recursively search with depth limit."""
+            if current_depth > max_depth:
+                return
+
+            try:
+                for item in path.iterdir():
+                    if item.is_file() and item.match(pattern):
+                        yield item
+                    elif item.is_dir() and not should_skip(item.name):
+                        yield from search_dir(item, current_depth + 1)
+            except (PermissionError, OSError):
+                # Skip directories we can't read
+                pass
+
+        yield from search_dir(root, 0)
+
     def _is_git_submodule(self, path: Path) -> bool:
         """Check if a path is a git submodule."""
         try:
@@ -583,9 +645,10 @@ Examples:
                         }
                     )
 
-        # 2. Apps format: *.leann.meta.json files anywhere in the project
+        # 2. Apps format: *.leann.meta.json files in the project
+        # Use limited-depth search to avoid scanning entire large directories
         cli_indexes_dir = project_path / ".leann" / "indexes"
-        for meta_file in project_path.rglob("*.leann.meta.json"):
+        for meta_file in self._find_meta_files_limited(project_path, max_depth=3):
             if meta_file.is_file():
                 # Skip CLI-built indexes (which store meta under .leann/indexes/<name>/)
                 try:
@@ -696,59 +759,43 @@ Examples:
             #   b) by the parent directory name (e.g., `new_txt`)
             seen_app_meta = set()
 
-            # 2a) by file base
-            for meta_file in project_path.rglob(f"{index_name}.leann.meta.json"):
-                if meta_file.is_file():
-                    # Skip CLI-built indexes' meta under .leann/indexes
-                    try:
-                        cli_indexes_dir = project_path / ".leann" / "indexes"
-                        if cli_indexes_dir.exists() and cli_indexes_dir in meta_file.parents:
-                            continue
-                    except Exception:
-                        pass
-                    is_current = project_path == current_path
-                    key = (str(project_path), str(meta_file))
-                    if key in seen_app_meta:
-                        continue
-                    seen_app_meta.add(key)
-                    matches.append(
-                        {
-                            "project_path": project_path,
-                            "files_dir": meta_file.parent,
-                            "meta_file": meta_file,
-                            "is_current": is_current,
-                            "kind": "app",
-                            "display_name": meta_file.parent.name,
-                            "file_base": meta_file.name.replace(".leann.meta.json", ""),
-                        }
-                    )
+            # Use limited-depth search to avoid scanning large directories
+            for meta_file in self._find_meta_files_limited(project_path, max_depth=3):
+                if not meta_file.is_file():
+                    continue
 
-            # 2b) by parent directory name
-            for meta_file in project_path.rglob("*.leann.meta.json"):
-                if meta_file.is_file() and meta_file.parent.name == index_name:
-                    # Skip CLI-built indexes' meta under .leann/indexes
-                    try:
-                        cli_indexes_dir = project_path / ".leann" / "indexes"
-                        if cli_indexes_dir.exists() and cli_indexes_dir in meta_file.parents:
-                            continue
-                    except Exception:
-                        pass
-                    is_current = project_path == current_path
-                    key = (str(project_path), str(meta_file))
-                    if key in seen_app_meta:
+                # Skip CLI-built indexes' meta under .leann/indexes
+                try:
+                    cli_indexes_dir = project_path / ".leann" / "indexes"
+                    if cli_indexes_dir.exists() and cli_indexes_dir in meta_file.parents:
                         continue
-                    seen_app_meta.add(key)
-                    matches.append(
-                        {
-                            "project_path": project_path,
-                            "files_dir": meta_file.parent,
-                            "meta_file": meta_file,
-                            "is_current": is_current,
-                            "kind": "app",
-                            "display_name": meta_file.parent.name,
-                            "file_base": meta_file.name.replace(".leann.meta.json", ""),
-                        }
-                    )
+                except Exception:
+                    pass
+
+                file_base = meta_file.name.replace(".leann.meta.json", "")
+                parent_name = meta_file.parent.name
+
+                # Check if this matches the requested index_name
+                # Match by file base or by parent directory name
+                if file_base != index_name and parent_name != index_name:
+                    continue
+
+                is_current = project_path == current_path
+                key = (str(project_path), str(meta_file))
+                if key in seen_app_meta:
+                    continue
+                seen_app_meta.add(key)
+                matches.append(
+                    {
+                        "project_path": project_path,
+                        "files_dir": meta_file.parent,
+                        "meta_file": meta_file,
+                        "is_current": is_current,
+                        "kind": "app",
+                        "display_name": parent_name,
+                        "file_base": file_base,
+                    }
+                )
 
         # Sort: current project first, then by project name
         matches.sort(key=lambda x: (not x["is_current"], x["project_path"].name))
