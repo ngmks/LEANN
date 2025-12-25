@@ -210,3 +210,45 @@ class TestDiscoverIndexesPerformance:
 
         # Should NOT find the deep app index
         assert not any(idx["name"] == "d" for idx in indexes)
+
+    def test_discover_indexes_respects_custom_max_depth(self, tmp_path: Path):
+        """Should find deeper indexes when max_depth is increased."""
+        from leann.cli import LeannCLI
+
+        cli = LeannCLI()
+
+        # Create an app format index at depth 5
+        deep_dir = tmp_path / "a" / "b" / "c" / "d" / "e"
+        deep_dir.mkdir(parents=True)
+        (deep_dir / "deep.leann.meta.json").touch()
+
+        # With default max_depth=3, should NOT find it
+        indexes_shallow = cli._discover_indexes_in_project(tmp_path, max_depth=3)
+        assert not any(idx["name"] == "e" for idx in indexes_shallow)
+
+        # With max_depth=5, should find it
+        indexes_deep = cli._discover_indexes_in_project(tmp_path, max_depth=5)
+        assert any(idx["name"] == "e" for idx in indexes_deep)
+
+
+class TestMaxDepthCliOption:
+    """Test the --max-depth CLI option for leann list."""
+
+    def test_max_depth_argument_is_parsed(self):
+        """The --max-depth argument should be properly parsed."""
+        from leann.cli import LeannCLI
+
+        cli = LeannCLI()
+        parser = cli.create_parser()
+
+        # Test default value
+        args = parser.parse_args(["list"])
+        assert args.max_depth == 3
+
+        # Test custom value
+        args = parser.parse_args(["list", "--max-depth", "5"])
+        assert args.max_depth == 5
+
+        # Test another custom value
+        args = parser.parse_args(["list", "--max-depth", "10"])
+        assert args.max_depth == 10

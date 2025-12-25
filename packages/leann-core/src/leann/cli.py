@@ -350,7 +350,14 @@ Examples:
         )
 
         # List command
-        subparsers.add_parser("list", help="List all indexes")
+        list_parser = subparsers.add_parser("list", help="List all indexes")
+        list_parser.add_argument(
+            "--max-depth",
+            type=int,
+            default=3,
+            help="Maximum directory depth to scan for indexes (default: 3). "
+            "Increase if your indexes are in deeply nested directories.",
+        )
 
         # Remove command
         remove_parser = subparsers.add_parser("remove", help="Remove an index")
@@ -492,7 +499,13 @@ Examples:
             # If anything goes wrong, assume it's not a submodule
             return False
 
-    def list_indexes(self):
+    def list_indexes(self, max_depth: int = 3):
+        """List all LEANN indexes across registered projects.
+
+        Args:
+            max_depth: Maximum directory depth to scan for app-format indexes.
+                       Default is 3. Increase if indexes are in deeply nested directories.
+        """
         # Get all project directories with .leann
         global_registry = Path.home() / ".leann" / "projects.json"
         all_projects = []
@@ -537,7 +550,7 @@ Examples:
         print("   " + "─" * 45)
 
         current_indexes = self._discover_indexes_in_project(
-            current_path, exclude_dirs=other_projects
+            current_path, exclude_dirs=other_projects, max_depth=max_depth
         )
         if current_indexes:
             for idx in current_indexes:
@@ -556,7 +569,7 @@ Examples:
             print("   " + "─" * 45)
 
             for project_path in other_projects:
-                project_indexes = self._discover_indexes_in_project(project_path)
+                project_indexes = self._discover_indexes_in_project(project_path, max_depth=max_depth)
                 if not project_indexes:
                     continue
 
@@ -580,9 +593,9 @@ Examples:
             projects_count = 0
             for p in valid_projects:
                 if p == current_path:
-                    discovered = self._discover_indexes_in_project(p, exclude_dirs=other_projects)
+                    discovered = self._discover_indexes_in_project(p, exclude_dirs=other_projects, max_depth=max_depth)
                 else:
-                    discovered = self._discover_indexes_in_project(p)
+                    discovered = self._discover_indexes_in_project(p, max_depth=max_depth)
                 if len(discovered) > 0:
                     projects_count += 1
             print(f"📊 Total: {total_indexes} indexes across {projects_count} projects")
@@ -602,13 +615,17 @@ Examples:
                 print("   leann build my-docs --docs ./documents")
 
     def _discover_indexes_in_project(
-        self, project_path: Path, exclude_dirs: Optional[list[Path]] = None
+        self, project_path: Path, exclude_dirs: Optional[list[Path]] = None, max_depth: int = 3
     ):
         """Discover all indexes in a project directory (both CLI and apps formats)
 
-        exclude_dirs: when provided, skip any APP-format index files that are
-        located under these directories. This prevents duplicates when the
-        current project is a parent directory of other registered projects.
+        Args:
+            project_path: The project directory to search.
+            exclude_dirs: When provided, skip any APP-format index files that are
+                located under these directories. This prevents duplicates when the
+                current project is a parent directory of other registered projects.
+            max_depth: Maximum directory depth to scan for app-format indexes.
+                Default is 3. Increase if indexes are in deeply nested directories.
         """
         indexes = []
         exclude_dirs = exclude_dirs or []
@@ -648,7 +665,7 @@ Examples:
         # 2. Apps format: *.leann.meta.json files in the project
         # Use limited-depth search to avoid scanning entire large directories
         cli_indexes_dir = project_path / ".leann" / "indexes"
-        for meta_file in self._find_meta_files_limited(project_path, max_depth=3):
+        for meta_file in self._find_meta_files_limited(project_path, max_depth=max_depth):
             if meta_file.is_file():
                 # Skip CLI-built indexes (which store meta under .leann/indexes/<name>/)
                 try:
@@ -1726,7 +1743,7 @@ Examples:
             return
 
         if args.command == "list":
-            self.list_indexes()
+            self.list_indexes(max_depth=args.max_depth)
         elif args.command == "remove":
             self.remove_index(args.index_name, args.force)
         elif args.command == "build":
