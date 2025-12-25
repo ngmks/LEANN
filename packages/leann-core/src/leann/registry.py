@@ -4,14 +4,160 @@ import importlib
 import importlib.metadata
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional, TypedDict, Union
 
 if TYPE_CHECKING:
     from leann.interface import LeannBackendFactoryInterface
 
 # Set up logger for this module
 logger = logging.getLogger(__name__)
+
+
+# Global index registry path
+GLOBAL_INDEX_REGISTRY_PATH = Path.home() / ".leann" / "indexes.json"
+
+
+class IndexEntry(TypedDict):
+    """Schema for a registered index entry."""
+
+    name: str
+    path: str
+    index_type: str  # "cli" or "app"
+    created_at: str  # ISO format datetime
+
+
+def _load_index_registry() -> list[IndexEntry]:
+    """Load the global index registry from disk."""
+    if not GLOBAL_INDEX_REGISTRY_PATH.exists():
+        return []
+    try:
+        with open(GLOBAL_INDEX_REGISTRY_PATH) as f:
+            data = json.load(f)
+            return data.get("indexes", [])
+    except Exception as e:
+        logger.debug(f"Could not load index registry: {e}")
+        return []
+
+
+def _save_index_registry(indexes: list[IndexEntry]) -> bool:
+    """Save the global index registry to disk."""
+    try:
+        GLOBAL_INDEX_REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(GLOBAL_INDEX_REGISTRY_PATH, "w") as f:
+            json.dump({"indexes": indexes}, f, indent=2)
+        return True
+    except Exception as e:
+        logger.warning(f"Could not save index registry: {e}")
+        return False
+
+
+def register_index(
+    name: str,
+    path: Union[str, Path],
+    index_type: str = "cli",
+) -> bool:
+    """Register an index in the global registry.
+
+    Args:
+        name: Display name of the index.
+        path: Path to the index file (e.g., /path/to/.leann/indexes/my-index/documents.leann).
+        index_type: Type of index - "cli" or "app".
+
+    Returns:
+        True if registration succeeded, False otherwise.
+    """
+    path_str = str(Path(path).resolve())
+
+    indexes = _load_index_registry()
+
+    # Check if already registered (by path)
+    for idx in indexes:
+        if idx["path"] == path_str:
+            # Update existing entry
+            idx["name"] = name
+            idx["index_type"] = index_type
+            return _save_index_registry(indexes)
+
+    # Add new entry
+    entry: IndexEntry = {
+        "name": name,
+        "path": path_str,
+        "index_type": index_type,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    indexes.append(entry)
+    return _save_index_registry(indexes)
+
+
+def unregister_index(path: Union[str, Path]) -> bool:
+    """Remove an index from the global registry.
+
+    Args:
+        path: Path to the index file.
+
+    Returns:
+        True if unregistration succeeded, False otherwise.
+    """
+    path_str = str(Path(path).resolve())
+    indexes = _load_index_registry()
+
+    original_count = len(indexes)
+    indexes = [idx for idx in indexes if idx["path"] != path_str]
+
+    if len(indexes) < original_count:
+        return _save_index_registry(indexes)
+    return True  # Nothing to remove is still success
+
+
+def list_registered_indexes(validate: bool = True) -> list[IndexEntry]:
+    """Get all registered indexes from the global registry.
+
+    Args:
+        validate: If True, removes entries whose paths no longer exist.
+
+    Returns:
+        List of registered index entries.
+    """
+    indexes = _load_index_registry()
+
+    if validate:
+        valid_indexes = []
+        for idx in indexes:
+            # Check if the meta file exists
+            meta_path = Path(idx["path"] + ".meta.json")
+            if meta_path.exists():
+                valid_indexes.append(idx)
+            else:
+                logger.debug(f"Removing stale index entry: {idx['path']}")
+
+        if len(valid_indexes) < len(indexes):
+            _save_index_registry(valid_indexes)
+        return valid_indexes
+
+    return indexes
+
+
+def cleanup_stale_indexes() -> int:
+    """Remove registry entries for indexes that no longer exist.
+
+    Returns:
+        Number of stale entries removed.
+    """
+    indexes = _load_index_registry()
+    original_count = len(indexes)
+
+    valid_indexes = []
+    for idx in indexes:
+        meta_path = Path(idx["path"] + ".meta.json")
+        if meta_path.exists():
+            valid_indexes.append(idx)
+
+    if len(valid_indexes) < original_count:
+        _save_index_registry(valid_indexes)
+
+    return original_count - len(valid_indexes)
 
 BACKEND_REGISTRY: dict[str, "LeannBackendFactoryInterface"] = {}
 

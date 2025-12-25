@@ -5,7 +5,9 @@ leann list from scanning all files in large directories like $HOME.
 See: https://github.com/yichuan-w/LEANN/issues/122
 """
 
+import json
 from pathlib import Path
+from unittest.mock import patch
 
 
 class TestLimitedDepthSearch:
@@ -252,3 +254,129 @@ class TestMaxDepthCliOption:
         # Test another custom value
         args = parser.parse_args(["list", "--max-depth", "10"])
         assert args.max_depth == 10
+
+
+class TestGlobalIndexRegistry:
+    """Test the global index registry for O(1) index discovery."""
+
+    def test_register_and_list_index(self, tmp_path: Path):
+        """Should register an index and list it from the registry."""
+        from leann.registry import (
+            GLOBAL_INDEX_REGISTRY_PATH,
+            _load_index_registry,
+            _save_index_registry,
+            register_index,
+            list_registered_indexes,
+            unregister_index,
+        )
+
+        # Use a temporary registry file
+        test_registry = tmp_path / "indexes.json"
+        with patch("leann.registry.GLOBAL_INDEX_REGISTRY_PATH", test_registry):
+            # Register an index
+            index_path = tmp_path / ".leann" / "indexes" / "test-index" / "documents.leann"
+            index_path.parent.mkdir(parents=True)
+            index_path.touch()
+            (index_path.parent / "documents.leann.meta.json").touch()
+
+            result = register_index(
+                name="test-index",
+                path=str(index_path),
+                index_type="cli",
+            )
+            assert result is True
+
+            # List indexes
+            indexes = list_registered_indexes(validate=True)
+            assert len(indexes) == 1
+            assert indexes[0]["name"] == "test-index"
+            assert indexes[0]["index_type"] == "cli"
+
+            # Unregister
+            result = unregister_index(str(index_path))
+            assert result is True
+
+            # Should be empty now
+            indexes = list_registered_indexes(validate=False)
+            assert len(indexes) == 0
+
+    def test_registry_validates_stale_entries(self, tmp_path: Path):
+        """Should remove entries for indexes that no longer exist."""
+        from leann.registry import (
+            _save_index_registry,
+            list_registered_indexes,
+        )
+
+        test_registry = tmp_path / "indexes.json"
+        with patch("leann.registry.GLOBAL_INDEX_REGISTRY_PATH", test_registry):
+            # Create a registry with a stale entry
+            stale_entry = {
+                "name": "stale-index",
+                "path": str(tmp_path / "nonexistent" / "documents.leann"),
+                "index_type": "cli",
+                "created_at": "2024-01-01T00:00:00+00:00",
+            }
+            _save_index_registry([stale_entry])
+
+            # List with validation should remove the stale entry
+            indexes = list_registered_indexes(validate=True)
+            assert len(indexes) == 0
+
+    def test_register_index_updates_existing(self, tmp_path: Path):
+        """Should update an existing entry instead of duplicating."""
+        from leann.registry import (
+            register_index,
+            list_registered_indexes,
+        )
+
+        test_registry = tmp_path / "indexes.json"
+        with patch("leann.registry.GLOBAL_INDEX_REGISTRY_PATH", test_registry):
+            # Create the index files
+            index_path = tmp_path / "test.leann"
+            index_path.touch()
+            (tmp_path / "test.leann.meta.json").touch()
+
+            # Register twice with different names
+            register_index(name="first-name", path=str(index_path), index_type="app")
+            register_index(name="second-name", path=str(index_path), index_type="app")
+
+            # Should only have one entry with the updated name
+            indexes = list_registered_indexes(validate=True)
+            assert len(indexes) == 1
+            assert indexes[0]["name"] == "second-name"
+
+
+class TestListIndexesWithRegistry:
+    """Test that list_indexes uses the global registry when available."""
+
+    def test_list_indexes_uses_registry_when_available(self, tmp_path: Path, capsys):
+        """Should use O(1) registry lookup when indexes are registered."""
+        from leann.cli import LeannCLI
+        from leann.registry import register_index
+
+        test_registry = tmp_path / "indexes.json"
+
+        # Create an index
+        index_dir = tmp_path / ".leann" / "indexes" / "my-index"
+        index_dir.mkdir(parents=True)
+        index_path = index_dir / "documents.leann"
+        index_path.touch()
+        (index_dir / "documents.leann.meta.json").touch()
+
+        with patch("leann.registry.GLOBAL_INDEX_REGISTRY_PATH", test_registry):
+            with patch("leann.cli.list_registered_indexes") as mock_list:
+                # Mock the registry to return our index
+                mock_list.return_value = [
+                    {
+                        "name": "my-index",
+                        "path": str(index_path),
+                        "index_type": "cli",
+                        "created_at": "2024-01-01T00:00:00+00:00",
+                    }
+                ]
+
+                cli = LeannCLI()
+                cli.list_indexes()
+
+                captured = capsys.readouterr()
+                assert "O(1) lookup" in captured.out or "global registry" in captured.out.lower()
