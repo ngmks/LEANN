@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from .api import LeannSearcher
 from .cli import LeannCLI
@@ -56,7 +56,7 @@ def _resolve_index_path(index_name: str) -> str:
     return index_path
 
 
-def _list_current_project_indexes() -> List[Dict[str, Any]]:
+def _list_current_project_indexes() -> list[dict[str, Any]]:
     """
     Return machine-readable index metadata for the current project.
 
@@ -65,7 +65,7 @@ def _list_current_project_indexes() -> List[Dict[str, Any]]:
     """
     cli = LeannCLI()
     current_path = Path.cwd()
-    indexes: List[Dict[str, Any]] = []
+    indexes: list[dict[str, Any]] = []
 
     for idx in cli._discover_indexes_in_project(current_path):  # type: ignore[attr-defined]
         # `idx` includes keys like: name, type (cli/app), status, size_mb
@@ -108,7 +108,7 @@ def create_app():
         id: str
         score: float
         text: str
-        metadata: Dict[str, Any]
+        metadata: dict[str, Any]
 
     app = FastAPI(
         title="LEANN Vector DB Server",
@@ -121,17 +121,17 @@ def create_app():
     )
 
     @app.get("/health")
-    async def health() -> Dict[str, str]:
+    async def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/indexes")
-    async def list_indexes() -> List[Dict[str, Any]]:
+    async def list_indexes() -> list[dict[str, Any]]:
         """
         List indexes for the current project (the working directory where the server runs).
         """
         return _list_current_project_indexes()
 
-    @app.post("/indexes/{index_name}/search", response_model=List[SearchResultModel])
+    @app.post("/indexes/{index_name}/search", response_model=list[SearchResultModel])
     async def search_index(index_name: str, body: SearchRequest):
         """
         Run semantic search against an existing LEANN index.
@@ -194,5 +194,4 @@ def main() -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-
 
