@@ -1,5 +1,7 @@
 import argparse
 import asyncio
+import contextlib
+import os
 import time
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -19,7 +21,37 @@ from .settings import (
 )
 
 
-def extract_pdf_text_with_pymupdf(file_path: str) -> str:
+@contextlib.contextmanager
+def suppress_cpp_output(suppress: bool = True):
+    """Context manager to suppress C++ stdout/stderr output from FAISS/HNSW.
+
+    This redirects file descriptors at the OS level to suppress native C++ output
+    that cannot be controlled via Python's logging framework.
+    """
+    if not suppress:
+        yield
+        return
+
+    # Save original file descriptors
+    old_stdout_fd = os.dup(1)
+    old_stderr_fd = os.dup(2)
+
+    try:
+        # Open /dev/null for writing
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, 1)  # Redirect stdout
+        os.dup2(devnull, 2)  # Redirect stderr
+        os.close(devnull)
+        yield
+    finally:
+        # Restore original file descriptors
+        os.dup2(old_stdout_fd, 1)
+        os.dup2(old_stderr_fd, 2)
+        os.close(old_stdout_fd)
+        os.close(old_stderr_fd)
+
+
+def extract_pdf_text_with_pymupdf(file_path: str) -> str | None:
     """Extract text from PDF using PyMuPDF for better quality."""
     try:
         import fitz  # PyMuPDF
@@ -35,7 +67,7 @@ def extract_pdf_text_with_pymupdf(file_path: str) -> str:
         return None
 
 
-def extract_pdf_text_with_pdfplumber(file_path: str) -> str:
+def extract_pdf_text_with_pdfplumber(file_path: str) -> str | None:
     """Extract text from PDF using pdfplumber for better quality."""
     try:
         import pdfplumber
@@ -95,6 +127,21 @@ Examples:
   leann list                                                             # List all stored indexes
   leann remove my-docs                                                   # Remove an index (local first, then global)
             """,
+        )
+
+        # Global verbosity options
+        verbosity_group = parser.add_mutually_exclusive_group()
+        verbosity_group.add_argument(
+            "-v",
+            "--verbose",
+            action="store_true",
+            help="Show detailed output including C++ backend logs from FAISS/HNSW",
+        )
+        verbosity_group.add_argument(
+            "-q",
+            "--quiet",
+            action="store_true",
+            help="Suppress all non-essential output (default behavior)",
         )
 
         subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -357,6 +404,17 @@ Examples:
         remove_parser.add_argument("index_name", help="Index name to remove")
         remove_parser.add_argument(
             "--force", "-f", action="store_true", help="Force removal without confirmation"
+        )
+
+        # Serve command (HTTP API server)
+        serve_parser = subparsers.add_parser(
+            "serve", help="Start HTTP API server for LEANN vector DB"
+        )
+        serve_parser.add_argument(
+            "--host", type=str, default=None, help="Host to bind to (default: 0.0.0.0)"
+        )
+        serve_parser.add_argument(
+            "--port", type=int, default=None, help="Port to bind to (default: 8000)"
         )
 
         return parser
@@ -1668,6 +1726,35 @@ Examples:
 
             _ask_once(query)
 
+    async def serve_api(self, args):
+        """Start the HTTP API server."""
+        import os
+
+        try:
+            from .server import main as server_main
+
+            # Override host/port if provided via CLI args
+            if args.host:
+                os.environ["LEANN_SERVER_HOST"] = args.host
+            if args.port:
+                os.environ["LEANN_SERVER_PORT"] = str(args.port)
+
+            # Run the server (this is blocking, so we don't await it)
+            # The server_main function handles uvicorn.run which blocks
+            server_main()
+        except ImportError as e:
+            print(
+                "❌ HTTP server dependencies not installed.\n"
+                "Install them with:\n"
+                "  uv pip install 'leann-core[server]'\n"
+                "or:\n"
+                "  uv pip install 'fastapi>=0.115' 'pydantic>=2' 'uvicorn[standard]'\n"
+            )
+            raise SystemExit(1) from e
+        except Exception as e:
+            print(f"❌ Error starting server: {e}")
+            raise SystemExit(1) from e
+
     async def run(self, args=None):
         parser = self.create_parser()
 
@@ -1678,16 +1765,24 @@ Examples:
             parser.print_help()
             return
 
+        # Determine whether to suppress C++ output
+        # Default is to suppress (quiet mode), unless --verbose is specified
+        suppress = not getattr(args, "verbose", False)
+
         if args.command == "list":
             self.list_indexes()
         elif args.command == "remove":
             self.remove_index(args.index_name, args.force)
         elif args.command == "build":
-            await self.build_index(args)
+            with suppress_cpp_output(suppress):
+                await self.build_index(args)
         elif args.command == "search":
-            await self.search_documents(args)
+            with suppress_cpp_output(suppress):
+                await self.search_documents(args)
         elif args.command == "ask":
             await self.ask_questions(args)
+        elif args.command == "serve":
+            await self.serve_api(args)
         else:
             parser.print_help()
 
