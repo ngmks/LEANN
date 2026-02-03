@@ -250,6 +250,7 @@ class ClaudeCodeReader(BaseReader):
                 meta.update(
                     {
                         "entry_type": "turn",
+                        "turn_id": f"{session_id}:{turn_index}",
                         "turn_index": turn_index,
                         "timestamp": turn_timestamp,
                         "git_branch": turn_branch,
@@ -650,8 +651,6 @@ class ClaudeCodeReader(BaseReader):
             "source": "claude_code_session",
             "session_id": session_id,
             "project_name": session_meta.get("project_name", ""),
-            "project_path": session_meta.get("projectPath", ""),
-            "cwd": session_meta.get("cwd", session_meta.get("projectPath", "")),
             "session_summary": session_meta.get("summary", ""),
             "message_count": session_meta.get("messageCount", 0),
         }
