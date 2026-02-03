@@ -389,9 +389,10 @@ class BaseRAGExample(ABC):
         """Main entry point for the example."""
         args = self.parser.parse_args()
 
-        # Check if index exists
+        # Check if index exists by looking for the metadata file, not just the directory
         index_path = str(Path(args.index_dir) / f"{self.default_index_name}.leann")
-        index_exists = Path(args.index_dir).exists()
+        meta_path = Path(args.index_dir) / f"{self.default_index_name}.leann.meta.json"
+        index_exists = meta_path.exists()
 
         if not index_exists or args.force_rebuild:
             # Load data and build index
