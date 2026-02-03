@@ -5,7 +5,6 @@ leann list from scanning all files in large directories like $HOME.
 See: https://github.com/yichuan-w/LEANN/issues/122
 """
 
-import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -262,11 +261,8 @@ class TestGlobalIndexRegistry:
     def test_register_and_list_index(self, tmp_path: Path):
         """Should register an index and list it from the registry."""
         from leann.registry import (
-            GLOBAL_INDEX_REGISTRY_PATH,
-            _load_index_registry,
-            _save_index_registry,
-            register_index,
             list_registered_indexes,
+            register_index,
             unregister_index,
         )
 
@@ -325,8 +321,8 @@ class TestGlobalIndexRegistry:
     def test_register_index_updates_existing(self, tmp_path: Path):
         """Should update an existing entry instead of duplicating."""
         from leann.registry import (
-            register_index,
             list_registered_indexes,
+            register_index,
         )
 
         test_registry = tmp_path / "indexes.json"
@@ -352,7 +348,6 @@ class TestListIndexesWithRegistry:
     def test_list_indexes_uses_registry_when_available(self, tmp_path: Path, capsys):
         """Should use O(1) registry lookup when indexes are registered."""
         from leann.cli import LeannCLI
-        from leann.registry import register_index
 
         test_registry = tmp_path / "indexes.json"
 

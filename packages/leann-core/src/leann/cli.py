@@ -800,7 +800,9 @@ Examples:
             print("   " + "─" * 45)
 
             for project_path in other_projects:
-                project_indexes = self._discover_indexes_in_project(project_path, max_depth=max_depth)
+                project_indexes = self._discover_indexes_in_project(
+                    project_path, max_depth=max_depth
+                )
                 if not project_indexes:
                     continue
 
@@ -824,7 +826,9 @@ Examples:
             projects_count = 0
             for p in valid_projects:
                 if p == current_path:
-                    discovered = self._discover_indexes_in_project(p, exclude_dirs=other_projects, max_depth=max_depth)
+                    discovered = self._discover_indexes_in_project(
+                        p, exclude_dirs=other_projects, max_depth=max_depth
+                    )
                 else:
                     discovered = self._discover_indexes_in_project(p, max_depth=max_depth)
                 if len(discovered) > 0:

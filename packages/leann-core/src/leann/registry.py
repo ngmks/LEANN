@@ -159,6 +159,7 @@ def cleanup_stale_indexes() -> int:
 
     return original_count - len(valid_indexes)
 
+
 BACKEND_REGISTRY: dict[str, "LeannBackendFactoryInterface"] = {}
 
 

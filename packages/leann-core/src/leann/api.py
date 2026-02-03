@@ -1360,7 +1360,6 @@ class LeannSearcher:
             # Avoid noisy errors during interpreter shutdown
             pass
 
-
     def warmup(self, port: int = 5557) -> float:
         """Pre-warm the embedding server and model for faster subsequent searches.
 
@@ -1389,7 +1388,7 @@ class LeannSearcher:
         try:
             # Start the embedding server with warmup enabled
             # This triggers model loading in the server process
-            zmq_port = self.backend_impl._ensure_server_running(
+            self.backend_impl._ensure_server_running(
                 self.meta_path_str,
                 port=port,
                 enable_warmup=True,

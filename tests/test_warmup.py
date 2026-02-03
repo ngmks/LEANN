@@ -14,6 +14,15 @@ from unittest.mock import patch
 import pytest
 
 
+def _diskann_available() -> bool:
+    try:
+        import leann_backend_diskann  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 @pytest.fixture
 def sample_index(tmp_path):
     """Create a small sample index for testing."""
@@ -113,10 +122,10 @@ class TestAutoWarmup:
         from leann.api import LeannSearcher
 
         # We can't easily mock the warmup call since it happens in __init__
-        # So we test that _warmup_enabled is set
+        # So we test that _warmup is set
         searcher = LeannSearcher(sample_index, enable_warmup=True)
         try:
-            assert searcher._warmup_enabled is True
+            assert searcher._warmup is True
         finally:
             searcher.cleanup()
 
@@ -176,6 +185,10 @@ class TestEmbeddingServerWarmup:
         assert "enable_warmup" in params
         assert params["enable_warmup"].default is True
 
+    @pytest.mark.skipif(
+        not _diskann_available(),
+        reason="DiskANN backend not installed",
+    )
     def test_diskann_server_accepts_warmup_param(self):
         """Test that DiskANN embedding server accepts enable_warmup parameter."""
         import inspect
