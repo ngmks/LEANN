@@ -288,9 +288,16 @@ def create_ast_chunks(
 
 
 def create_traditional_chunks(
-    documents, chunk_size: int = 256, chunk_overlap: int = 128
+    documents,
+    chunk_size: int = 256,
+    chunk_overlap: int = 128,
+    extra_metadata_keys: Optional[list[str]] = None,
 ) -> list[dict[str, Any]]:
     """Create traditional text chunks using LlamaIndex SentenceSplitter.
+
+    Args:
+        extra_metadata_keys: Additional metadata keys to preserve from the
+            source documents (beyond the default file_path/file_name/source).
 
     Returns:
         List of dicts with {"text": str, "metadata": dict}
@@ -322,6 +329,10 @@ def create_traditional_chunks(
             doc_metadata["creation_date"] = doc.metadata["creation_date"]
         if "last_modified_date" in doc.metadata:
             doc_metadata["last_modified_date"] = doc.metadata["last_modified_date"]
+        if extra_metadata_keys:
+            for key in extra_metadata_keys:
+                if key in doc.metadata:
+                    doc_metadata[key] = doc.metadata[key]
 
         try:
             nodes = node_parser.get_nodes_from_documents([doc])
@@ -338,13 +349,16 @@ def create_traditional_chunks(
 
 
 def _traditional_chunks_as_dicts(
-    documents, chunk_size: int = 256, chunk_overlap: int = 128
+    documents,
+    chunk_size: int = 256,
+    chunk_overlap: int = 128,
+    extra_metadata_keys: Optional[list[str]] = None,
 ) -> list[dict[str, Any]]:
     """Helper: Traditional chunking that returns dict format for consistency.
 
     This is now just an alias for create_traditional_chunks for backwards compatibility.
     """
-    return create_traditional_chunks(documents, chunk_size, chunk_overlap)
+    return create_traditional_chunks(documents, chunk_size, chunk_overlap, extra_metadata_keys)
 
 
 def create_text_chunks(
@@ -356,8 +370,13 @@ def create_text_chunks(
     ast_chunk_overlap: int = 64,
     code_file_extensions: Optional[list[str]] = None,
     ast_fallback_traditional: bool = True,
+    extra_metadata_keys: Optional[list[str]] = None,
 ) -> list[dict[str, Any]]:
     """Create text chunks from documents with optional AST support for code files.
+
+    Args:
+        extra_metadata_keys: Additional metadata keys to preserve from the
+            source documents (beyond the default file_path/file_name/source).
 
     Returns:
         List of dicts with {"text": str, "metadata": dict}
@@ -396,14 +415,14 @@ def create_text_chunks(
                 logger.error(f"AST chunking failed: {e}")
                 if ast_fallback_traditional:
                     all_chunks.extend(
-                        _traditional_chunks_as_dicts(code_docs, chunk_size, chunk_overlap)
+                        _traditional_chunks_as_dicts(code_docs, chunk_size, chunk_overlap, extra_metadata_keys)
                     )
                 else:
                     raise
         if text_docs:
-            all_chunks.extend(_traditional_chunks_as_dicts(text_docs, chunk_size, chunk_overlap))
+            all_chunks.extend(_traditional_chunks_as_dicts(text_docs, chunk_size, chunk_overlap, extra_metadata_keys))
     else:
-        all_chunks = _traditional_chunks_as_dicts(documents, chunk_size, chunk_overlap)
+        all_chunks = _traditional_chunks_as_dicts(documents, chunk_size, chunk_overlap, extra_metadata_keys)
 
     logger.info(f"Total chunks created: {len(all_chunks)}")
 
