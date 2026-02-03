@@ -19,6 +19,15 @@ from chunking import create_text_chunks
 
 from claude_code_data.claude_code_reader import ClaudeCodeReader
 
+# Keys from ClaudeCodeReader._base_metadata() to preserve through chunking
+_CLAUDE_CODE_METADATA_KEYS = [
+    "session_id",
+    "project_name",
+    "session_summary",
+    "message_count",
+    "turn_id",
+]
+
 # ---------------------------------------------------------------------------
 # Manifest helpers
 # ---------------------------------------------------------------------------
@@ -181,7 +190,10 @@ class ClaudeCodeRAG(BaseRAGExample):
 
         print(f"Loaded {len(documents)} documents, creating text chunks...")
         chunks = create_text_chunks(
-            documents, chunk_size=args.chunk_size, chunk_overlap=args.chunk_overlap
+            documents,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            extra_metadata_keys=_CLAUDE_CODE_METADATA_KEYS,
         )
         print(f"Created {len(chunks)} text chunks")
         return chunks
@@ -329,7 +341,10 @@ class ClaudeCodeRAG(BaseRAGExample):
             return [], manifest
 
         chunks = create_text_chunks(
-            all_documents, chunk_size=args.chunk_size, chunk_overlap=args.chunk_overlap
+            all_documents,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            extra_metadata_keys=_CLAUDE_CODE_METADATA_KEYS,
         )
         print(f"Incremental: {len(all_documents)} new documents -> {len(chunks)} chunks")
 
