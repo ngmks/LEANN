@@ -45,6 +45,14 @@ requires_diskann = pytest.mark.skipif(
     reason="DiskANN backend not installed",
 )
 
+# DiskANN's C++ StaticDiskFloatIndex crashes with SIGABRT when a LeannSearcher
+# is created after cleanup() on a previous one (disk-index lifecycle bug).
+# The crash is in pybind11 batch_search and cannot be caught by Python.
+# Apply this marker to tests that use the cleanup → re-creation sequence.
+skip_diskann_search = pytest.mark.skip(
+    reason="DiskANN SIGABRT on searcher cleanup + re-creation sequence (upstream C++ bug)",
+)
+
 requires_diskann_partitioner = pytest.mark.skipif(
     not diskann_partitioner_available(),
     reason="DiskANN graph partitioner executable not compiled (run third_party/DiskANN/graph_partition/build.sh)",

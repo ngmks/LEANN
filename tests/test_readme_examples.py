@@ -21,10 +21,7 @@ def test_readme_basic_example(backend_name):
     if backend_name == "diskann":
         if not diskann_importable():
             pytest.skip("DiskANN backend not installed")
-        # DiskANN's C++ batch_search crashes (SIGABRT) when a second LeannSearcher
-        # is created after cleanup() on the first one.  This is an upstream bug in
-        # the DiskANN disk-index lifecycle; skip until it is fixed.
-        pytest.skip("DiskANN crashes on searcher cleanup + re-creation sequence (upstream bug)")
+        pytest.skip("DiskANN SIGABRT on searcher cleanup + re-creation sequence (upstream C++ bug)")
 
     # This is the exact code from README (with smaller model for CI)
     from leann import LeannBuilder, LeannChat, LeannSearcher
@@ -144,7 +141,7 @@ def test_llm_config_simulated(backend_name):
     if backend_name == "diskann":
         if not diskann_importable():
             pytest.skip("DiskANN backend not installed")
-        pytest.skip("DiskANN crashes on searcher cleanup + re-creation sequence (upstream bug)")
+        pytest.skip("DiskANN SIGABRT on searcher cleanup + re-creation sequence (upstream C++ bug)")
 
     from leann import LeannBuilder, LeannChat
 
