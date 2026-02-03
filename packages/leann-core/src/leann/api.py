@@ -995,25 +995,10 @@ class LeannSearcher:
         )
         self.bm25_scorer: Optional[BM25Scorer] = None
 
-        # Optional one-shot warmup at construction time to hide cold-start latency.
+        # Auto-warmup if requested - this pre-loads the embedding model
+        # to avoid cold-start latency on the first search
         if self._warmup:
-            try:
-                _ = self.backend_impl.compute_query_embedding(
-                    "__LEANN_WARMUP__",
-                    use_server_if_available=self.recompute_embeddings,
-                )
-            except Exception as exc:
-                logger.warning(f"Warmup embedding failed (ignored): {exc}")
-
-        # Optional one-shot warmup at construction time to hide cold-start latency.
-        if self._warmup:
-            try:
-                _ = self.backend_impl.compute_query_embedding(
-                    "__LEANN_WARMUP__",
-                    use_server_if_available=self.recompute_embeddings,
-                )
-            except Exception as exc:
-                logger.warning(f"Warmup embedding failed (ignored): {exc}")
+            self.warmup()
 
     def search(
         self,
@@ -1374,6 +1359,60 @@ class LeannSearcher:
         except Exception:
             # Avoid noisy errors during interpreter shutdown
             pass
+
+
+    def warmup(self, port: int = 5557) -> float:
+        """Pre-warm the embedding server and model for faster subsequent searches.
+
+        This method starts the embedding server (if not already running) and
+        ensures the embedding model is loaded and cached. Call this before
+        your first search to avoid cold-start latency.
+
+        Args:
+            port: ZMQ port for the embedding server (default: 5557)
+
+        Returns:
+            Time taken for warmup in seconds
+
+        Example:
+            >>> searcher = LeannSearcher("path/to/index.leann")
+            >>> warmup_time = searcher.warmup()
+            >>> print(f"Warmup completed in {warmup_time:.2f}s")
+            >>> # Subsequent searches will be faster
+            >>> results = searcher.search("my query")
+        """
+        import time
+
+        start_time = time.time()
+        logger.info("Starting LeannSearcher warmup...")
+
+        try:
+            # Start the embedding server with warmup enabled
+            # This triggers model loading in the server process
+            zmq_port = self.backend_impl._ensure_server_running(
+                self.meta_path_str,
+                port=port,
+                enable_warmup=True,
+            )
+
+            # Optionally, do a dummy query to ensure everything is fully warmed up
+            # This tests the full path including ZMQ communication
+            try:
+                _ = self.backend_impl.compute_query_embedding(
+                    "__LEANN_WARMUP__",
+                    use_server_if_available=self.recompute_embeddings,
+                )
+            except Exception as exc:
+                logger.warning(f"Warmup embedding failed during dummy query (soft fail): {exc}")
+
+        except Exception as e:
+            logger.error(f"Warmup failed: {e}")
+            # Don't raise, we want to allow search even if warmup fails
+            return 0.0
+
+        elapsed = time.time() - start_time
+        logger.info(f"Warmup completed in {elapsed:.4f}s")
+        return elapsed
 
 
 class LeannChat:

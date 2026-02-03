@@ -337,6 +337,9 @@ class EmbeddingServerManager:
             command.extend(["--embedding-mode", embedding_mode])
         if kwargs.get("distance_metric"):
             command.extend(["--distance-metric", kwargs["distance_metric"]])
+        # Control warmup behavior - default is enabled, use --no-warmup to disable
+        if not kwargs.get("enable_warmup", True):
+            command.append("--no-warmup")
 
         return command
 

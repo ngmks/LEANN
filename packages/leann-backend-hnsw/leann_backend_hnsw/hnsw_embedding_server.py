@@ -61,13 +61,23 @@ def create_hnsw_embedding_server(
     model_name: str = "sentence-transformers/all-mpnet-base-v2",
     distance_metric: str = "mips",
     embedding_mode: str = "sentence-transformers",
+    enable_warmup: bool = True,
 ):
     """
     Create and start a ZMQ-based embedding server for HNSW backend.
     Simplified version using unified embedding computation module.
+
+    Args:
+        passages_file: Path to the metadata file (.meta.json)
+        zmq_port: Port for ZMQ server
+        model_name: Name of the embedding model to use
+        distance_metric: Distance metric (mips, l2, cosine)
+        embedding_mode: Embedding backend mode
+        enable_warmup: If True, pre-load model and run warmup embedding on startup
     """
     logger.info(f"Starting HNSW server on port {zmq_port} with model {model_name}")
     logger.info(f"Using embedding mode: {embedding_mode}")
+    logger.info(f"Warmup enabled: {enable_warmup}")
 
     # Add leann-core to path for unified embedding computation
     current_dir = Path(__file__).parent
@@ -84,6 +94,24 @@ def create_hnsw_embedding_server(
         return
     finally:
         sys.path.pop(0)
+
+    # Warmup: Pre-load the embedding model by computing a dummy embedding
+    # This ensures the model is cached and ready for fast subsequent queries
+    if enable_warmup:
+        warmup_start = time.time()
+        logger.info("Starting model warmup...")
+        try:
+            # Compute a dummy embedding to trigger model loading and caching
+            _ = compute_embeddings(
+                ["warmup query for model preloading"],
+                model_name,
+                mode=embedding_mode,
+                provider_options=PROVIDER_OPTIONS,
+            )
+            warmup_time = time.time() - warmup_start
+            logger.info(f"Model warmup completed in {warmup_time:.2f}s")
+        except Exception as e:
+            logger.warning(f"Model warmup failed (non-fatal): {e}")
 
     # Check port availability
     import socket
@@ -492,8 +520,22 @@ if __name__ == "__main__":
         choices=["sentence-transformers", "openai", "mlx", "ollama"],
         help="Embedding backend mode",
     )
+    parser.add_argument(
+        "--enable-warmup",
+        action="store_true",
+        default=True,
+        help="Pre-load embedding model on startup for faster first query (default: True)",
+    )
+    parser.add_argument(
+        "--no-warmup",
+        action="store_true",
+        help="Disable warmup (lazy model loading)",
+    )
 
     args = parser.parse_args()
+
+    # Determine warmup setting (--no-warmup takes precedence)
+    enable_warmup = not args.no_warmup
 
     # Create and start the HNSW embedding server
     create_hnsw_embedding_server(
@@ -502,4 +544,5 @@ if __name__ == "__main__":
         model_name=args.model_name,
         distance_metric=args.distance_metric,
         embedding_mode=args.embedding_mode,
+        enable_warmup=enable_warmup,
     )
