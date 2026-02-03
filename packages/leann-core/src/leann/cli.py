@@ -12,7 +12,12 @@ from tqdm import tqdm
 
 from .api import LeannBuilder, LeannChat, LeannSearcher
 from .interactive_utils import create_cli_session
-from .registry import register_project_directory
+from .registry import (
+    list_registered_indexes,
+    register_index,
+    register_project_directory,
+    unregister_index,
+)
 from .settings import (
     resolve_anthropic_base_url,
     resolve_ollama_host,
@@ -605,10 +610,137 @@ Examples:
     def list_indexes(self, max_depth: int = 3):
         """List all LEANN indexes across registered projects.
 
+        Uses the global index registry for O(1) lookup when available.
+        Falls back to directory scanning for legacy indexes not yet registered.
+
         Args:
             max_depth: Maximum directory depth to scan for app-format indexes.
                        Default is 3. Increase if indexes are in deeply nested directories.
         """
+        current_path = Path.cwd()
+
+        # Try to use global index registry first (O(1) lookup)
+        registered_indexes = list_registered_indexes(validate=True)
+
+        print("📚 LEANN Indexes")
+        print("=" * 50)
+
+        if registered_indexes:
+            # Use the fast path - global registry
+            self._list_indexes_from_registry(registered_indexes, current_path)
+        else:
+            # Fall back to directory scanning for legacy support
+            self._list_indexes_by_scanning(current_path, max_depth)
+
+    def _list_indexes_from_registry(self, registered_indexes: list, current_path: Path):
+        """List indexes using the global registry (O(1) lookup)."""
+        # Group indexes by project
+        current_indexes = []
+        other_indexes_by_project: dict[str, list] = {}
+
+        for idx in registered_indexes:
+            idx_path = Path(idx["path"])
+            # Determine which project this index belongs to
+            # CLI indexes: /path/to/project/.leann/indexes/name/documents.leann
+            # App indexes: /path/to/project/somewhere/file.leann
+            try:
+                if ".leann/indexes" in idx["path"]:
+                    # CLI format - project is 3 levels up from .leann
+                    project_path = idx_path.parent.parent.parent.parent
+                else:
+                    # App format - use parent directory
+                    project_path = idx_path.parent
+            except Exception:
+                project_path = idx_path.parent
+
+            # Calculate size
+            size_mb = 0
+            try:
+                meta_path = Path(idx["path"] + ".meta.json")
+                if meta_path.exists():
+                    index_dir = meta_path.parent
+                    for f in index_dir.glob(f"{meta_path.stem.replace('.meta', '')}*"):
+                        if f.is_file():
+                            size_mb += f.stat().st_size / (1024 * 1024)
+            except (OSError, PermissionError):
+                pass
+
+            index_info = {
+                "name": idx["name"],
+                "type": idx["index_type"],
+                "status": "✅",
+                "size_mb": size_mb,
+                "path": idx["path"],
+                "project_path": project_path,
+            }
+
+            # Check if this is in current project
+            try:
+                if project_path.resolve() == current_path.resolve():
+                    current_indexes.append(index_info)
+                else:
+                    project_key = str(project_path)
+                    if project_key not in other_indexes_by_project:
+                        other_indexes_by_project[project_key] = []
+                    other_indexes_by_project[project_key].append(index_info)
+            except Exception:
+                # If comparison fails, treat as other project
+                project_key = str(project_path)
+                if project_key not in other_indexes_by_project:
+                    other_indexes_by_project[project_key] = []
+                other_indexes_by_project[project_key].append(index_info)
+
+        total_indexes = len(registered_indexes)
+        current_indexes_count = len(current_indexes)
+
+        # Show current project first
+        print("\n🏠 Current Project")
+        print(f"   {current_path}")
+        print("   " + "─" * 45)
+
+        if current_indexes:
+            for i, idx in enumerate(current_indexes, 1):
+                type_icon = "📁" if idx["type"] == "cli" else "📄"
+                print(f"   {i}. {type_icon} {idx['name']} {idx['status']}")
+                if idx["size_mb"] > 0:
+                    print(f"      📦 Size: {idx['size_mb']:.1f} MB")
+        else:
+            print("   📭 No indexes in current project")
+
+        # Show other projects
+        if other_indexes_by_project:
+            print("\n\n🗂️  Other Projects")
+            print("   " + "─" * 45)
+
+            for project_key, indexes in other_indexes_by_project.items():
+                project_path = Path(project_key)
+                print(f"\n   📂 {project_path.name}")
+                print(f"      {project_path}")
+
+                for idx in indexes:
+                    type_icon = "📁" if idx["type"] == "cli" else "📄"
+                    print(f"      • {type_icon} {idx['name']} {idx['status']}")
+                    if idx["size_mb"] > 0:
+                        print(f"        📦 {idx['size_mb']:.1f} MB")
+
+        # Summary
+        print("\n" + "=" * 50)
+        projects_count = 1 if current_indexes else 0
+        projects_count += len(other_indexes_by_project)
+        print(f"📊 Total: {total_indexes} indexes across {projects_count} projects")
+        print("⚡ Using global registry (O(1) lookup)")
+
+        if current_indexes_count > 0:
+            print("\n💫 Quick start (current project):")
+            example_name = current_indexes[0]["name"]
+            print(f'   leann search {example_name} "your query"')
+            print(f"   leann ask {example_name} --interactive")
+        else:
+            print("\n💡 Create your first index:")
+            print("   leann build my-docs --docs ./documents")
+
+    def _list_indexes_by_scanning(self, current_path: Path, max_depth: int):
+        """List indexes by scanning directories (legacy fallback)."""
         # Get all project directories with .leann
         global_registry = Path.home() / ".leann" / "projects.json"
         all_projects = []
@@ -630,7 +762,6 @@ Examples:
                 valid_projects.append(project_path)
 
         # Add current project if it has .leann but not in registry
-        current_path = Path.cwd()
         if (current_path / ".leann" / "indexes").exists() and current_path not in valid_projects:
             valid_projects.append(current_path)
 
@@ -640,9 +771,6 @@ Examples:
         for project_path in valid_projects:
             if project_path != current_path:
                 other_projects.append(project_path)
-
-        print("📚 LEANN Indexes")
-        print("=" * 50)
 
         total_indexes = 0
         current_indexes_count = 0
@@ -702,6 +830,7 @@ Examples:
                 if len(discovered) > 0:
                     projects_count += 1
             print(f"📊 Total: {total_indexes} indexes across {projects_count} projects")
+            print("🔍 Using directory scan (run 'leann build' to enable fast registry)")
 
             if current_indexes_count > 0:
                 print("\n💫 Quick start (current project):")
@@ -1077,11 +1206,21 @@ Examples:
     ):
         """Delete a CLI index directory or APP index files safely."""
         try:
+            # Determine index path for unregistering from global registry
+            index_path_for_registry = None
+
             if is_app:
                 removed = 0
                 errors = 0
                 # Delete only files that belong to this app index (based on file base)
                 pattern_base = app_file_base or ""
+
+                # Find the .leann file path for unregistering
+                for f in index_dir.glob(f"{pattern_base}.leann"):
+                    if f.is_file() and not f.name.endswith(".meta.json"):
+                        index_path_for_registry = str(f)
+                        break
+
                 for f in index_dir.glob(f"{pattern_base}.leann*"):
                     try:
                         f.unlink()
@@ -1097,6 +1236,10 @@ Examples:
                         errors += 1
 
                 if removed > 0 and errors == 0:
+                    # Unregister from global registry
+                    if index_path_for_registry:
+                        unregister_index(index_path_for_registry)
+
                     if project_path:
                         print(
                             f"✅ App index '{index_display_name}' removed from {project_path.name}"
@@ -1117,7 +1260,13 @@ Examples:
             else:
                 import shutil
 
+                # For CLI indexes, the path is index_dir / "documents.leann"
+                index_path_for_registry = str(index_dir / "documents.leann")
+
                 shutil.rmtree(index_dir)
+
+                # Unregister from global registry
+                unregister_index(index_path_for_registry)
 
                 if project_path:
                     print(f"✅ Index '{index_display_name}' removed from {project_path.name}")
@@ -1625,7 +1774,10 @@ Examples:
         builder.build_index(index_path)
         print(f"Index built at {index_path}")
 
-        # Register this project directory in global registry
+        # Register this index in global registry for O(1) discovery
+        register_index(name=index_name, path=index_path, index_type="cli")
+
+        # Register this project directory in global registry (legacy support)
         self.register_project_dir()
 
     async def search_documents(self, args):
