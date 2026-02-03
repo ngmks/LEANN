@@ -6,17 +6,16 @@ storage space by partitioning large DiskANN indices and safely deleting
 redundant files while maintaining search functionality.
 """
 
-import os
 import tempfile
 from pathlib import Path
 
 import pytest
 
+from conftest import requires_diskann, requires_diskann_partitioner
 
-@pytest.mark.skipif(
-    os.environ.get("CI") == "true",
-    reason="Skip DiskANN partition tests in CI - requires specific hardware and large memory",
-)
+
+@pytest.mark.diskann
+@requires_diskann
 def test_diskann_without_partition():
     """Test DiskANN index building without partition (baseline)."""
     from leann.api import LeannBuilder, LeannSearcher
@@ -83,10 +82,8 @@ def test_diskann_without_partition():
         assert all(result.score is not None and result.score != float("-inf") for result in results)
 
 
-@pytest.mark.skipif(
-    os.environ.get("CI") == "true",
-    reason="Skip DiskANN partition tests in CI - requires specific hardware and large memory",
-)
+@pytest.mark.diskann
+@requires_diskann_partitioner
 def test_diskann_with_partition():
     """Test DiskANN index building with automatic graph partitioning."""
     from leann.api import LeannBuilder
@@ -154,10 +151,8 @@ def test_diskann_with_partition():
             )
 
 
-@pytest.mark.skipif(
-    os.environ.get("CI") == "true",
-    reason="Skip DiskANN partition tests in CI - requires specific hardware and large memory",
-)
+@pytest.mark.diskann
+@requires_diskann_partitioner
 def test_diskann_partition_search_functionality():
     """Test that search works correctly with partitioned indices."""
     from leann.api import LeannBuilder, LeannSearcher
@@ -220,10 +215,8 @@ def test_diskann_partition_search_functionality():
             )
 
 
-@pytest.mark.skipif(
-    os.environ.get("CI") == "true",
-    reason="Skip DiskANN partition tests in CI - requires specific hardware and large memory",
-)
+@pytest.mark.diskann
+@requires_diskann_partitioner
 def test_diskann_medoid_and_norm_files():
     """Test that medoid and max_base_norm files are correctly generated and used."""
     import struct
@@ -291,10 +284,8 @@ def test_diskann_medoid_and_norm_files():
         )
 
 
-@pytest.mark.skipif(
-    os.environ.get("CI") == "true",
-    reason="Skip performance comparison in CI - requires significant compute time",
-)
+@pytest.mark.diskann
+@requires_diskann_partitioner
 def test_diskann_vs_hnsw_performance():
     """Compare DiskANN (with partition) vs HNSW performance."""
     import time

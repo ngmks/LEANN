@@ -14,13 +14,7 @@ from unittest.mock import patch
 import pytest
 
 
-def _diskann_available() -> bool:
-    try:
-        import leann_backend_diskann  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
+from conftest import diskann_importable
 
 
 @pytest.fixture
@@ -186,7 +180,7 @@ class TestEmbeddingServerWarmup:
         assert params["enable_warmup"].default is True
 
     @pytest.mark.skipif(
-        not _diskann_available(),
+        not diskann_importable(),
         reason="DiskANN backend not installed",
     )
     def test_diskann_server_accepts_warmup_param(self):
