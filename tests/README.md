@@ -2,133 +2,157 @@
 
 This directory contains automated tests for the LEANN project using pytest.
 
+## Setup
+
+### Install all dependencies:
+```bash
+# Full install with all backends and test tools
+uv sync --extra diskann --group test
+```
+
+### Verify key imports:
+```bash
+uv run python -c "import leann; import leann_backend_hnsw; import leann_backend_diskann; print('OK')"
+```
+
 ## Test Files
 
-### `test_readme_examples.py`
-Tests the examples shown in README.md:
-- The basic example code that users see first (parametrized for both HNSW and DiskANN backends)
-- Import statements work correctly
-- Different backend options (HNSW, DiskANN)
-- Different LLM configuration options (parametrized for both backends)
-- **All main README examples are tested with both HNSW and DiskANN backends using pytest parametrization**
+### Core & Backend
 
-### `test_basic.py`
-Basic functionality tests that verify:
-- All packages can be imported correctly
-- C++ extensions (FAISS, DiskANN) load properly
-- Basic index building and searching works for both HNSW and DiskANN backends
-- Uses parametrized tests to test both backends
+| File | Tests | Description |
+|------|-------|-------------|
+| `test_basic.py` | 3 | Import checks, C++ extensions, basic build/search (HNSW + DiskANN) |
+| `test_ci_minimal.py` | 4 | Minimal CI tests — no model loading or heavy memory usage |
+| `test_readme_examples.py` | 5 | README code examples work correctly (parametrized HNSW + DiskANN) |
+| `test_document_rag.py` | 5 | Document RAG with contriever/OpenAI embeddings |
+| `test_astchunk_integration.py` | 25 | AST-aware code chunking integration with LEANN |
 
-### `test_document_rag.py`
-Tests the document RAG example functionality:
-- Tests with facebook/contriever embeddings
-- Tests with OpenAI embeddings (if API key is available)
-- Tests error handling with invalid parameters
-- Verifies that normalized embeddings are detected and cosine distance is used
+### Search & Filtering
 
-### `test_diskann_partition.py`
-Tests DiskANN graph partitioning functionality:
-- Tests DiskANN index building without partitioning (baseline)
-- Tests automatic graph partitioning with `is_recompute=True`
-- Verifies that partition files are created and large files are cleaned up for storage saving
-- Tests search functionality with partitioned indices
-- Validates medoid and max_base_norm file generation and usage
-- Includes performance comparison between DiskANN (with partition) and HNSW
-- **Note**: These tests are skipped in CI due to hardware requirements and computation time
+| File | Tests | Description |
+|------|-------|-------------|
+| `test_hybrid_search.py` | 7 | Hybrid search (vector + BM25 via `gemma` parameter) |
+| `test_metadata_filtering.py` | 26 | `MetadataFilterEngine` — all 13 operators, `PassageManager` integration |
+| `test_warmup.py` | 10 | Warmup functionality for reducing search latency |
 
-### `test_prompt_template_e2e.py`
-Integration tests for prompt template feature with live embedding services:
-- Tests prompt template prepending with EmbeddingGemma (OpenAI-compatible API via LM Studio)
-- Tests hybrid token limit discovery (Ollama dynamic detection, registry fallback, default)
-- Tests LM Studio SDK bridge for automatic context length detection (requires Node.js + @lmstudio/sdk)
-- **Note**: These tests require live services (LM Studio, Ollama) and are marked with `@pytest.mark.integration`
-- **Important**: Prompt templates are ONLY for EmbeddingGemma and similar task-specific models, NOT regular embedding models
+### CLI
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `test_cli_ask.py` | 1 | `leann ask` command |
+| `test_cli_list_performance.py` | 14 | `leann list` — `_find_meta_files_limited` performance |
+| `test_cli_prompt_template.py` | 11 | `--embedding-prompt-template` CLI argument |
+| `test_cli_verbosity.py` | 11 | CLI verbosity options and C++ output suppression |
+
+### Embeddings & Prompt Templates
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `test_embedding_prompt_template.py` | 7 | Prompt template prepending for OpenAI embeddings |
+| `test_embedding_server_manager.py` | 1 | Embedding server lifecycle management |
+| `test_prompt_template_persistence.py` | 13 | Prompt template metadata persistence and reuse across sessions |
+| `test_token_truncation.py` | 24 | Token-aware truncation for embedding input |
+| `test_lmstudio_bridge.py` | 11 | LM Studio TypeScript SDK bridge for context length detection |
+| `test_prompt_template_e2e.py` | 10 | End-to-end with live services (LM Studio, Ollama). **Requires `@pytest.mark.integration`** |
+
+### MCP
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `test_mcp_standalone.py` | 4 | MCP reader unit tests (Slack, Twitter) — no LEANN core needed |
+| `test_mcp_integration.py` | 7 | MCP reader + RAG integration (Slack, Twitter) |
+
+### Claude Code Sessions
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `test_claude_code_rag.py` | 20 | `ClaudeCodeReader` parsing + `ClaudeCodeRAG` pipeline |
+
+Covers: turn/session/message granularity, agent subprocesses, summary indexing, deduplication, project name extraction, JSON malformé, incremental update, end-to-end build+search.
+
+Imports `apps/claude_code_data/` via `sys.path` — no extra install needed beyond `uv sync`.
+
+### DiskANN
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `test_diskann_partition.py` | 5 | Graph partitioning, medoid generation, partition search. **Skipped in CI** |
+
+### Other
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `test_sync.py` | 5 | Synchronization utilities |
 
 ## Running Tests
 
-### Install test dependencies:
+### All tests (excluding known CI-incompatible ones):
 ```bash
-# Using uv dependency groups (tools only)
-uv sync --only-group test
+uv run pytest tests/
 ```
 
-### Run all tests:
+### Skip slow or service-dependent tests:
 ```bash
-pytest tests/
-
-# Or with coverage
-pytest tests/ --cov=leann --cov-report=html
-
-# Run in parallel (faster)
-pytest tests/ -n auto
-```
-
-### Run specific tests:
-```bash
-# Only basic tests
-pytest tests/test_basic.py
-
-# Only tests that don't require OpenAI
-pytest tests/ -m "not openai"
-
 # Skip slow tests
-pytest tests/ -m "not slow"
+uv run pytest tests/ -m "not slow"
 
-# Skip integration tests (that require live services)
-pytest tests/ -m "not integration"
+# Skip tests requiring OpenAI API key
+uv run pytest tests/ -m "not openai"
 
-# Run only integration tests (requires LM Studio or Ollama running)
-pytest tests/test_prompt_template_e2e.py -v -s
-
-# Run DiskANN partition tests (requires local machine, not CI)
-pytest tests/test_diskann_partition.py
+# Skip integration tests (require LM Studio / Ollama running)
+uv run pytest tests/ -m "not integration"
 ```
 
-### Run with specific backend:
+### Run by category:
 ```bash
-# Test only HNSW backend
-pytest tests/test_basic.py::test_backend_basic[hnsw]
-pytest tests/test_readme_examples.py::test_readme_basic_example[hnsw]
+# Claude Code session tests only
+uv run pytest tests/test_claude_code_rag.py
 
-# Test only DiskANN backend
-pytest tests/test_basic.py::test_backend_basic[diskann]
-pytest tests/test_readme_examples.py::test_readme_basic_example[diskann]
+# Metadata filtering tests only
+uv run pytest tests/test_metadata_filtering.py
 
-# All DiskANN tests (parametrized + specialized partition tests)
-pytest tests/ -k diskann
+# All CLI tests
+uv run pytest tests/ -k "cli"
+
+# All MCP tests
+uv run pytest tests/ -k "mcp"
+
+# Specific backend
+uv run pytest tests/ -k "hnsw"
+uv run pytest tests/ -k "diskann"
 ```
 
-## CI/CD Integration
+### With coverage:
+```bash
+uv run pytest tests/ --cov=leann --cov-report=html
+```
 
-Tests are automatically run in GitHub Actions:
-1. After building wheel packages
-2. On multiple Python versions (3.9 - 3.13)
-3. On both Ubuntu and macOS
-4. Using pytest with appropriate markers and flags
+### In parallel:
+```bash
+uv run pytest tests/ -n auto
+```
 
-### pytest.ini Configuration
+## Test Markers
 
-The `pytest.ini` file configures:
-- Test discovery paths
-- Default timeout (600 seconds)
-- Environment variables (HF_HUB_DISABLE_SYMLINKS, TOKENIZERS_PARALLELISM)
-- Custom markers for slow and OpenAI tests
-- Verbose output with short tracebacks
+| Marker | Meaning |
+|--------|---------|
+| `slow` | Long-running tests (deselect with `-m "not slow"`) |
+| `openai` | Requires `OPENAI_API_KEY` env var |
+| `integration` | Requires live services (LM Studio, Ollama) |
 
-### Integration Test Prerequisites
+## Integration Test Prerequisites
 
-Integration tests (`test_prompt_template_e2e.py`) require live services:
-
-**Required:**
-- LM Studio running at `http://localhost:1234` with EmbeddingGemma model loaded
-
-**Optional:**
-- Ollama running at `http://localhost:11434` for token limit detection tests
-- Node.js + @lmstudio/sdk installed (`npm install -g @lmstudio/sdk`) for SDK bridge tests
+| Service | URL | Required for |
+|---------|-----|-------------|
+| LM Studio | `http://localhost:1234` | `test_prompt_template_e2e.py` |
+| Ollama | `http://localhost:11434` | Token limit detection, embeddings |
+| Node.js + @lmstudio/sdk | — | `test_lmstudio_bridge.py` (SDK bridge) |
 
 Tests gracefully skip if services are unavailable.
 
-### Known Issues
+## Known Issues
 
-- OpenAI tests are automatically skipped if no API key is provided
-- Integration tests require live embedding services and may fail due to proxy settings (set `unset ALL_PROXY all_proxy` if needed)
+- DiskANN partition tests are skipped in CI due to hardware requirements
+- OpenAI tests skip automatically if no API key is set
+- `test_hybrid_search.py` skips in CI to avoid MPS memory issues
+- Integration tests may fail behind a proxy (`unset ALL_PROXY all_proxy`)

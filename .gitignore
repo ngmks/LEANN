@@ -109,3 +109,6 @@ apps/multimodal/vision-based-pdf-multi-vector/multi-vector-colpali-native-weavia
 
 # AUR build directory (Arch Linux)
 paru-bin/
+
+# Local session reports
+SESSION_REPORT.md
