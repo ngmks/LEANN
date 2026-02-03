@@ -1,0 +1,188 @@
+#!/bin/bash
+set -euo pipefail
+
+# Deploy LEANN to local environment (pipx + Claude Code MCP)
+#
+# Usage:
+#   ./scripts/deploy.sh          # Quick: verify editable install + restart MCP
+#   ./scripts/deploy.sh --full   # Full: reinstall pipx packages + inject backend + restart MCP
+#   ./scripts/deploy.sh --check  # Check only: show current install state, no changes
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CORE_PKG="$PROJECT_ROOT/packages/leann-core"
+HNSW_PKG="$PROJECT_ROOT/packages/leann-backend-hnsw"
+
+MODE="${1:-quick}"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+info()  { echo -e "${GREEN}✓${NC} $1"; }
+warn()  { echo -e "${YELLOW}⚠${NC} $1"; }
+error() { echo -e "${RED}✗${NC} $1"; }
+
+check_install() {
+    echo "=== LEANN Install Status ==="
+    echo ""
+
+    # Check pipx
+    if ! command -v pipx &>/dev/null; then
+        error "pipx not found"
+        return 1
+    fi
+
+    # Check leann-core in pipx
+    if pipx list 2>/dev/null | grep -q "leann-core"; then
+        local location
+        location=$(pipx runpip leann-core show leann-core 2>/dev/null | grep "Editable project location" | cut -d: -f2- | xargs)
+        if [ -n "$location" ]; then
+            info "leann-core installed (editable: $location)"
+        else
+            warn "leann-core installed but NOT editable — run with --full"
+        fi
+    else
+        error "leann-core not installed in pipx"
+        return 1
+    fi
+
+    # Check HNSW backend
+    if pipx runpip leann-core show leann-backend-hnsw &>/dev/null; then
+        local hnsw_location
+        hnsw_location=$(pipx runpip leann-core show leann-backend-hnsw 2>/dev/null | grep "Editable project location" | cut -d: -f2- | xargs)
+        if [ -n "$hnsw_location" ]; then
+            info "leann-backend-hnsw injected (editable: $hnsw_location)"
+        else
+            warn "leann-backend-hnsw installed but NOT editable — run with --full"
+        fi
+    else
+        error "leann-backend-hnsw not injected — run with --full"
+        return 1
+    fi
+
+    # Check CLIs
+    for cmd in leann leann_mcp; do
+        if command -v "$cmd" &>/dev/null; then
+            info "$cmd available at $(which $cmd)"
+        else
+            error "$cmd not found in PATH"
+        fi
+    done
+
+    # Check MCP registration
+    if command -v claude &>/dev/null; then
+        if claude mcp list 2>/dev/null | grep -q "leann-server"; then
+            info "MCP server 'leann-server' registered in Claude Code"
+        else
+            warn "MCP server 'leann-server' not registered — will register"
+        fi
+    fi
+
+    echo ""
+}
+
+deploy_full() {
+    echo "=== Full Deploy ==="
+    echo ""
+
+    # Step 1: Install leann-core editable via pipx
+    info "Installing leann-core (editable)..."
+    pipx install -e "$CORE_PKG" --force 2>&1 | tail -3
+
+    # Step 2: Inject HNSW backend editable
+    info "Injecting leann-backend-hnsw (editable)..."
+    pipx inject leann-core -e "$HNSW_PKG" --force 2>&1 | tail -3
+
+    # Step 3: Verify
+    info "Verifying installation..."
+    leann --help >/dev/null 2>&1 && info "leann CLI works" || error "leann CLI failed"
+    echo '{}' | timeout 2 leann_mcp >/dev/null 2>&1; info "leann_mcp binary works"
+
+    echo ""
+}
+
+deploy_quick() {
+    echo "=== Quick Deploy ==="
+    echo ""
+
+    # Verify editable install is intact
+    local location
+    location=$(pipx runpip leann-core show leann-core 2>/dev/null | grep "Editable project location" | cut -d: -f2- | xargs)
+
+    if [ "$location" = "$CORE_PKG" ]; then
+        info "Editable install points to source — code changes are live"
+    else
+        warn "Editable install mismatch or missing — falling back to --full"
+        deploy_full
+        return
+    fi
+
+    echo ""
+}
+
+ensure_mcp_registered() {
+    if ! command -v claude &>/dev/null; then
+        warn "claude CLI not found — skipping MCP registration"
+        return
+    fi
+
+    # Only register if not already present
+    if claude mcp list 2>/dev/null | grep -q "leann-server"; then
+        info "MCP server already registered"
+    else
+        claude mcp add --scope user leann-server -- leann_mcp 2>&1 | tail -1
+        info "MCP server registered"
+    fi
+
+    echo ""
+    echo -e "  ${YELLOW}→ Run /mcp in Claude Code to reload the MCP server${NC}"
+    echo ""
+}
+
+run_smoke_test() {
+    echo "=== Smoke Test ==="
+    echo ""
+
+    # Test leann list
+    if leann list >/dev/null 2>&1; then
+        info "leann list works"
+    else
+        warn "leann list failed (no indexes?)"
+    fi
+
+    # Test MCP tool schema includes project param
+    local schema
+    schema=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' | timeout 5 leann_mcp 2>/dev/null)
+    if echo "$schema" | grep -q '"project"'; then
+        info "MCP schema includes 'project' parameter"
+    else
+        warn "MCP schema missing 'project' parameter"
+    fi
+
+    echo ""
+}
+
+# --- Main ---
+
+case "$MODE" in
+    --check)
+        check_install
+        ;;
+    --full)
+        check_install
+        deploy_full
+        ensure_mcp_registered
+        run_smoke_test
+        info "Full deploy complete!"
+        ;;
+    quick|*)
+        check_install
+        deploy_quick
+        ensure_mcp_registered
+        run_smoke_test
+        info "Quick deploy complete!"
+        ;;
+esac
