@@ -8,6 +8,7 @@ from leann.api import LeannSearcher
 from leann.registry import list_registered_indexes
 
 _searcher_cache: dict[str, LeannSearcher] = {}
+_turn_index_cache: dict[str, dict[str, list[str]]] = {}  # index_path -> {turn_id -> [texts]}
 
 
 def _resolve_index_path(index_name: str) -> str:
@@ -19,6 +20,29 @@ def _resolve_index_path(index_name: str) -> str:
     raise ValueError(f"Index '{index_name}' not found in registry. Use leann_list to see available indexes.")
 
 
+def _build_turn_index(index_path: str) -> dict[str, list[str]]:
+    """Build a turn_id -> [texts] lookup from the passages file (cached)."""
+    if index_path in _turn_index_cache:
+        return _turn_index_cache[index_path]
+
+    from pathlib import Path
+
+    passages_path = Path(str(index_path) + ".passages.jsonl")
+    turn_map: dict[str, list[str]] = {}
+    try:
+        with open(passages_path, encoding="utf-8") as f:
+            for line in f:
+                p = json.loads(line)
+                turn_id = p.get("metadata", {}).get("turn_id", "")
+                if turn_id:
+                    turn_map.setdefault(turn_id, []).append(p["text"])
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    _turn_index_cache[index_path] = turn_map
+    return turn_map
+
+
 def _do_search(args: dict) -> str:
     """Perform a search using the Python API directly, returning text and optional metadata."""
     index_name = args.get("index_name", "")
@@ -27,6 +51,7 @@ def _do_search(args: dict) -> str:
     complexity = args.get("complexity", 32)
     show_metadata = args.get("show_metadata", False)
     gemma = args.get("gemma", 0.5)
+    expand_turns = args.get("expand_turns", False)
 
     if not index_name or not query:
         return "Error: Both index_name and query are required"
@@ -43,8 +68,20 @@ def _do_search(args: dict) -> str:
     if not results:
         return f"No results found for '{query}'."
 
+    # Build turn index only when needed
+    turn_map = _build_turn_index(index_path) if expand_turns else {}
+
     lines = [f"Search results for '{query}' (top {len(results)}):\n"]
+    seen_turns: set[str] = set()
     for i, r in enumerate(results, 1):
+        turn_id = r.metadata.get("turn_id", "") if r.metadata else ""
+
+        # When expanding, skip duplicate turns (multiple chunks from same turn)
+        if expand_turns and turn_id:
+            if turn_id in seen_turns:
+                continue
+            seen_turns.add(turn_id)
+
         lines.append(f"{i}. Score: {r.score:.3f}")
         if show_metadata and r.metadata:
             meta_parts = []
@@ -55,8 +92,13 @@ def _do_search(args: dict) -> str:
             if meta_parts:
                 lines.append(f"   [Metadata]")
                 lines.append(f"   {' | '.join(meta_parts)}")
-        lines.append(f"   [Text]")
-        lines.append(f"   {r.text}")
+
+        if expand_turns and turn_id and turn_id in turn_map:
+            lines.append(f"   [Full Turn]")
+            lines.append(f"   {''.join(turn_map[turn_id])}")
+        else:
+            lines.append(f"   [Text]")
+            lines.append(f"   {r.text}")
         lines.append("")
 
     return "\n".join(lines)
@@ -75,7 +117,8 @@ def handle_request(request):
                     "LEANN is a semantic search engine over indexed codebases and session history. "
                     "Key parameter: 'gemma' controls hybrid search — use 0.5 (default) for short/keyword "
                     "queries, 1.0 for long descriptive questions, 0.0 for exact keyword matching. "
-                    "Always set show_metadata=true. Use 'leann_list' first to discover available indexes."
+                    "Always set show_metadata=true. Use 'leann_list' first to discover available indexes. "
+                    "Use expand_turns=true on session indexes to get full conversation turns instead of chunks."
                 ),
             },
         }
@@ -88,16 +131,17 @@ def handle_request(request):
                 "tools": [
                     {
                         "name": "leann_search",
-                        "description": """🔍 Semantic search with full results (no truncation). Supports hybrid search via `gemma`.
+                        "description": """🔍 Semantic search with full results (no truncation). Supports hybrid search via `gemma` and full turn expansion via `expand_turns`.
 
-⚙️ **How to tune `gemma` (hybrid search weight)**:
-- Short/vague keywords (e.g., "blague", "error handling") → gemma=0.5 (hybrid)
-- Descriptive question (e.g., "how does the authentication flow work?") → gemma=1.0 (pure semantic)
-- Exact phrase matching (e.g., "find where we use TODO") → gemma=0.0 (pure keyword/BM25)
-- When in doubt, use gemma=0.5 — it works well for most queries.
+⚙️ **`gemma` — hybrid search weight**:
+- Short/vague keywords → gemma=0.5 (hybrid, default)
+- Descriptive question → gemma=1.0 (pure semantic)
+- Exact phrase matching → gemma=0.0 (pure keyword/BM25)
+
+🔄 **`expand_turns`** — set to true on session indexes (e.g. claude-code-sessions) to return the full conversation turn instead of just the matched chunk. Deduplicates results from the same turn.
 
 💡 **Tips**:
-- Set show_metadata=true to see where results come from.
+- Set show_metadata=true to see where results come from (project, session, turn_id).
 - For broad exploration, use top_k=10. For focused answers, top_k=3-5.""",
                         "inputSchema": {
                             "type": "object",
@@ -135,6 +179,11 @@ def handle_request(request):
                                     "minimum": 0.0,
                                     "maximum": 1.0,
                                     "description": "Hybrid search weight: 1.0 = pure semantic/vector, 0.0 = pure keyword/BM25, 0.5 = balanced hybrid (recommended default).",
+                                },
+                                "expand_turns": {
+                                    "type": "boolean",
+                                    "default": False,
+                                    "description": "When true, return the full conversation turn instead of just the matched chunk. Only works on indexes with turn_id metadata (e.g. claude-code-sessions).",
                                 },
                             },
                             "required": ["index_name", "query"],
