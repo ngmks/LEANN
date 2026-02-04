@@ -92,6 +92,11 @@ class ClaudeCodeRAG(BaseRAGExample):
                 action.default = default_index_dir
                 action.help = f"Directory to store the index (default: {default_index_dir})"
                 break
+        # Override default embedding-mode to ollama (bge-m3 is an Ollama model)
+        for action in self.parser._actions:
+            if hasattr(action, "option_strings") and "--embedding-mode" in action.option_strings:
+                action.default = "ollama"
+                break
 
     # ------------------------------------------------------------------
     # CLI arguments
@@ -110,6 +115,13 @@ class ClaudeCodeRAG(BaseRAGExample):
             type=str,
             default=None,
             help="Only index projects whose name contains this string",
+        )
+        grp.add_argument(
+            "--whitelist-file",
+            type=str,
+            default=None,
+            help="Path to whitelist JSON (e.g. ~/.leann/whitelist.json). "
+            "Only index projects listed in this file.",
         )
         grp.add_argument(
             "--granularity",
@@ -202,8 +214,24 @@ class ClaudeCodeRAG(BaseRAGExample):
     # Incremental update
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _load_whitelist_dirs(whitelist_path: str) -> set[str] | None:
+        """Load whitelisted claude_dir names from a whitelist JSON file."""
+        try:
+            data = json.loads(Path(whitelist_path).read_text(encoding="utf-8"))
+            return {p["claude_dir"] for p in data.get("projects", []) if "claude_dir" in p}
+        except (json.JSONDecodeError, OSError, KeyError):
+            return None
+
     def _discover_session_files(self, args) -> dict[str, Path]:
         """Return dict mapping session_id -> JSONL path for all sessions."""
+        # Load whitelist filter if provided
+        whitelist_dirs: set[str] | None = None
+        if getattr(args, "whitelist_file", None):
+            whitelist_dirs = self._load_whitelist_dirs(args.whitelist_file)
+            if whitelist_dirs is not None:
+                print(f"Whitelist active: {len(whitelist_dirs)} project(s)")
+
         sessions: dict[str, Path] = {}
         for base in args.session_dirs:
             base_path = Path(base)
@@ -211,6 +239,9 @@ class ClaudeCodeRAG(BaseRAGExample):
                 continue
             for project_dir in sorted(base_path.iterdir()):
                 if not project_dir.is_dir():
+                    continue
+                # Whitelist filter: only scan whitelisted project dirs
+                if whitelist_dirs is not None and project_dir.name not in whitelist_dirs:
                     continue
                 if args.project_filter:
                     name = ClaudeCodeReader._extract_project_name(project_dir.name)
