@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg" alt="Python Versions">
+  <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg" alt="Python Versions">
   <img src="https://github.com/yichuan-w/LEANN/actions/workflows/build-and-publish.yml/badge.svg" alt="CI Status">
   <img src="https://img.shields.io/badge/Platform-Ubuntu%20%26%20Arch%20%26%20WSL%20%7C%20macOS%20(ARM64%2FIntel)-lightgrey" alt="Platform">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License">
@@ -857,6 +857,62 @@ Once your iMessage conversations are indexed, you can search with queries like:
 
 </details>
 
+### 🤖 Gemini CLI History: Search Your AI Conversations!
+
+Index and search your Gemini CLI conversation history stored in `~/.gemini`. Perfect for finding previous AI interactions and solutions.
+
+```bash
+python -m apps.gemini_rag --query "How did I solve the authentication issue?"
+```
+
+<details>
+<summary><strong>📋 Click to expand: Gemini-Specific Arguments</strong></summary>
+
+```bash
+--gemini-path PATH    # Path to .gemini directory (default: ~/.gemini)
+--max-items N         # Maximum conversations to index
+```
+
+</details>
+
+### 🦉 Qwen Code CLI: Your Coding Assistant Memory!
+
+Transform your Qwen Code CLI history into a searchable knowledge base. Find coding solutions and discussions from your Qwen conversations.
+
+```bash
+python -m apps.qwen_rag --query "Python async patterns"
+```
+
+<details>
+<summary><strong>📋 Click to expand: Qwen-Specific Arguments</strong></summary>
+
+```bash
+--qwen-path PATH    # Path to .qwen-code directory (default: ~/.qwen-code)
+--max-items N       # Maximum conversations to index
+```
+
+</details>
+
+### 🖼️ Image RAG: Visual Search with CLIP!
+
+Enable semantic search on your images using CLIP embeddings. Find images using natural language descriptions.
+
+```bash
+python -m apps.image_rag --image-dir ./my_photos/ --query "sunset over mountains"
+python -m apps.image_rag --image-dir ./my_photos/ --interactive
+```
+
+<details>
+<summary><strong>📋 Click to expand: Image-Specific Arguments</strong></summary>
+
+```bash
+--image-dir PATH              # Directory containing images to index (required)
+--image-extensions EXT...     # File extensions to process (default: .jpg .jpeg .png .gif .bmp .webp)
+--batch-size N                # Batch size for CLIP embedding (default: 32)
+```
+
+</details>
+
 ### MCP Integration: RAG on Live Data from Any Platform
 
 Connect to live data sources through the Model Context Protocol (MCP). LEANN now supports real-time RAG on platforms like Slack, Twitter, and more through standardized MCP servers.
@@ -998,6 +1054,60 @@ Want to add support for other platforms? LEANN's MCP integration is designed for
 - Notion pages
 - Google Drive documents
 - And many more in the MCP ecosystem!
+
+</details>
+
+### 🧠 Claude Code Session RAG: Search Your AI Conversations! (Fork Feature)
+
+**This fork adds automatic indexation of your Claude Code sessions**, enabling semantic search across all your AI conversations, debugging sessions, and coding insights.
+
+```bash
+# Add current project to the whitelist for automatic indexation
+/leann-add
+
+# Sessions are automatically indexed on each new Claude Code session
+# Search your past conversations via MCP
+leann_search query="authentication bug fix" index="claude-code-sessions"
+```
+
+**Key Features:**
+- 🔄 **Incremental Updates**: Only new/modified sessions are re-indexed
+- 📊 **Rich Metadata**: Filter by project, timestamp, git branch, model
+- ★ **Insight Extraction**: Educational blocks are indexed separately
+- 🏷️ **Entry Types**: `turn`, `agent_turn`, `summary`, `insight`
+
+<details>
+<summary><strong>📋 Click to expand: Slash Commands</strong></summary>
+
+```bash
+/leann-add      # Enable automatic indexation for current project
+/leann-remove   # Disable automatic indexation
+```
+
+**How it works:**
+1. `/leann-add` adds your project to the whitelist (`~/.leann/whitelist.json`)
+2. A `SessionStart` hook is configured in `.claude/settings.local.json`
+3. Each new Claude Code session triggers incremental indexation
+4. Sessions are searchable via MCP (`leann_search` tool)
+
+</details>
+
+<details>
+<summary><strong>📋 Click to expand: Manual Indexation</strong></summary>
+
+```bash
+# Full build from Claude projects directory
+python -m apps.claude_code_rag --claude-dir ~/.claude/projects
+
+# Incremental update only
+python -m apps.claude_code_rag --claude-dir ~/.claude/projects --incremental
+
+# Filter by whitelist
+python -m apps.claude_code_rag --whitelist-file ~/.leann/whitelist.json
+
+# Include agent conversations and insights
+python -m apps.claude_code_rag --include-agents --include-insights
+```
 
 </details>
 
@@ -1152,6 +1262,35 @@ Options:
 # - Requires confirmation for cross-project removal
 # - Interactive selection when multiple matches found
 # - Supports both CLI and app-created indexes
+```
+
+**React Command (ReAct Agent):**
+```bash
+leann react INDEX_NAME QUERY [OPTIONS]
+
+Options:
+  --llm {ollama,openai,hf,anthropic}  LLM provider (default: ollama)
+  --model MODEL                        Model name (default: qwen3:8b)
+  --host URL                           Ollama-compatible host URL
+  --top-k N                            Results per search (default: 5)
+  --max-iterations N                   Max search iterations (default: 5)
+  --api-base URL                       Base URL for OpenAI-compatible APIs
+  --api-key KEY                        API key for cloud providers
+
+# Multi-turn reasoning agent that iteratively searches and synthesizes answers
+# See docs/react_agent.md for detailed documentation
+```
+
+**Serve Command (HTTP API):**
+```bash
+leann serve [OPTIONS]
+
+Options:
+  --host HOST    Host to bind to (default: 0.0.0.0)
+  --port PORT    Port to bind to (default: 8000)
+
+# Starts a FastAPI HTTP server exposing LEANN as a REST API
+# Endpoints: /search, /build, /list, /health
 ```
 
 </details>
