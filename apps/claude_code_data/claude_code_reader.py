@@ -7,6 +7,7 @@ session summaries.
 """
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -34,12 +35,14 @@ class ClaudeCodeReader(BaseReader):
         include_tool_names: bool = True,
         include_summaries: bool = True,
         include_agents: bool = True,
+        include_insights: bool = True,
         max_text_per_turn: int = 0,
     ) -> None:
         self.granularity = granularity
         self.include_tool_names = include_tool_names
         self.include_summaries = include_summaries
         self.include_agents = include_agents
+        self.include_insights = include_insights
         self.max_text_per_turn = max_text_per_turn
 
     # ------------------------------------------------------------------
@@ -233,24 +236,26 @@ class ClaudeCodeReader(BaseReader):
             if not current_user_text and not assistant_parts:
                 return
 
+            assistant_text = "\n".join(assistant_parts)
             text = self._format_turn_text(
                 session_meta.get("project_name", ""),
                 turn_branch,
                 turn_timestamp,
                 current_user_text,
-                "\n".join(assistant_parts),
+                assistant_text,
                 tool_names,
             )
             if self.max_text_per_turn > 0:
                 text = text[: self.max_text_per_turn]
 
+            turn_id = f"{session_id}:{turn_index}"
             meta = {}
             if include_metadata:
                 meta = self._base_metadata(session_id, session_meta)
                 meta.update(
                     {
                         "entry_type": "turn",
-                        "turn_id": f"{session_id}:{turn_index}",
+                        "turn_id": turn_id,
                         "turn_index": turn_index,
                         "timestamp": turn_timestamp,
                         "git_branch": turn_branch,
@@ -259,6 +264,23 @@ class ClaudeCodeReader(BaseReader):
                 )
 
             docs.append(Document(text=text, metadata=meta))
+
+            # Extract and emit insight documents
+            if self.include_insights:
+                for insight_body in self._extract_insights_from_text(assistant_text):
+                    docs.append(
+                        self._make_insight_doc(
+                            insight_body,
+                            session_id,
+                            session_meta,
+                            turn_id,
+                            turn_timestamp,
+                            turn_branch,
+                            turn_model,
+                            include_metadata,
+                        )
+                    )
+
             turn_index += 1
             current_user_text = ""
             assistant_parts = []
@@ -545,6 +567,59 @@ class ClaudeCodeReader(BaseReader):
         if include_metadata:
             meta = self._base_metadata(session_id, session_meta)
             meta["entry_type"] = "summary"
+
+        return Document(text=text, metadata=meta)
+
+    # ------------------------------------------------------------------
+    # Insight documents
+    # ------------------------------------------------------------------
+
+    _INSIGHT_RE = re.compile(
+        r"`?★ Insight[─ ]*`?\s*\n(.*?)(?:\n\s*`?─{5,}`?|$)",
+        re.DOTALL,
+    )
+
+    @staticmethod
+    def _extract_insights_from_text(text: str) -> list[str]:
+        """Extract ★ Insight blocks from assistant text.
+
+        Returns a list of insight body strings (usually 0, 1, or 2).
+        """
+        return [
+            m.group(1).strip()
+            for m in ClaudeCodeReader._INSIGHT_RE.finditer(text)
+            if m.group(1).strip()
+        ]
+
+    def _make_insight_doc(
+        self,
+        insight_text: str,
+        session_id: str,
+        session_meta: dict,
+        turn_id: str,
+        turn_timestamp: str,
+        turn_branch: str,
+        turn_model: str,
+        include_metadata: bool,
+    ) -> Document:
+        """Create a Document for a single ★ Insight block."""
+        project = session_meta.get("project_name", "")
+        date_str = self._format_date(turn_timestamp) if turn_timestamp else "unknown date"
+
+        text = f"Insight ({project}, {date_str}):\n{insight_text}"
+
+        meta = {}
+        if include_metadata:
+            meta = self._base_metadata(session_id, session_meta)
+            meta.update(
+                {
+                    "entry_type": "insight",
+                    "turn_id": turn_id,
+                    "timestamp": turn_timestamp,
+                    "git_branch": turn_branch,
+                    "model": turn_model,
+                }
+            )
 
         return Document(text=text, metadata=meta)
 

@@ -161,6 +161,12 @@ class ClaudeCodeRAG(BaseRAGExample):
             help="Do not index subagent conversations",
         )
         grp.add_argument(
+            "--no-insights",
+            action="store_true",
+            default=False,
+            help="Do not index ★ Insight blocks as separate documents",
+        )
+        grp.add_argument(
             "--chunk-size",
             type=int,
             default=512,
@@ -192,6 +198,7 @@ class ClaudeCodeRAG(BaseRAGExample):
             include_tool_names=include_tool,
             include_summaries=not args.no_summaries,
             include_agents=not args.no_agents,
+            include_insights=not getattr(args, "no_insights", False),
             max_text_per_turn=args.max_text_per_turn,
         )
 
@@ -300,6 +307,7 @@ class ClaudeCodeRAG(BaseRAGExample):
             include_tool_names=include_tool,
             include_summaries=not args.no_summaries,
             include_agents=not args.no_agents,
+            include_insights=not getattr(args, "no_insights", False),
             max_text_per_turn=args.max_text_per_turn,
         )
 
