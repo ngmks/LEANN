@@ -207,6 +207,7 @@ def run_inline_indexation(project_entry: dict) -> tuple[int, int]:
         if chunks:
             index_path = str(Path(args.index_dir) / f"{rag.default_index_name}.leann")
             await rag._update_index(args, chunks, index_path)
+            rag._register_index(index_path)
             from claude_code_rag import _save_manifest
             _save_manifest(args.index_dir, manifest)
             return len(manifest.get("sessions", {})), len(chunks)
@@ -306,6 +307,13 @@ def main() -> None:
             sys.stdout = io.StringIO()
             try:
                 sessions, chunks = run_inline_indexation(project_entry)
+            except Exception as exc:
+                sys.stdout = old_stdout
+                output_plain(
+                    f"[LEANN] Erreur lors de l'indexation inline : {exc}. "
+                    f"L'indexation sera retentée à la prochaine session."
+                )
+                return
             finally:
                 sys.stdout = old_stdout
 
