@@ -19,13 +19,19 @@ from chunking import create_text_chunks
 
 from claude_code_data.claude_code_reader import ClaudeCodeReader
 
-# Keys from ClaudeCodeReader._base_metadata() to preserve through chunking
+# Keys from ClaudeCodeReader metadata to preserve through chunking.
+# These survive the chunking stage and are stored in .passages.jsonl,
+# enabling filtering and display in MCP search results.
 _CLAUDE_CODE_METADATA_KEYS = [
     "session_id",
     "project_name",
     "session_summary",
     "message_count",
     "turn_id",
+    "entry_type",
+    "timestamp",
+    "git_branch",
+    "model",
 ]
 
 # ---------------------------------------------------------------------------
