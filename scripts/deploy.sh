@@ -14,6 +14,10 @@ CORE_PKG="$PROJECT_ROOT/packages/leann-core"
 HNSW_PKG="$PROJECT_ROOT/packages/leann-backend-hnsw"
 COMMANDS_SRC="$PROJECT_ROOT/scripts/claude-commands"
 COMMANDS_DST="$HOME/.claude/commands"
+SKILLS_SRC="$PROJECT_ROOT/scripts/claude-skills"
+SKILLS_DST="$HOME/.claude/skills"
+RULES_SRC="$PROJECT_ROOT/scripts/claude-rules"
+RULES_DST="$HOME/.claude/rules"
 
 MODE="${1:-quick}"
 
@@ -84,6 +88,28 @@ check_install() {
         else
             warn "Slash command /$(basename "$cmd_name" .md) not installed — will install"
             missing_cmds=1
+        fi
+    done
+
+    # Check Claude Code skills
+    for skill_dir in "$SKILLS_SRC"/*/; do
+        local skill_name
+        skill_name="$(basename "$skill_dir")"
+        if [ -d "$SKILLS_DST/$skill_name" ] && [ -f "$SKILLS_DST/$skill_name/SKILL.md" ]; then
+            info "Skill /$skill_name installed"
+        else
+            warn "Skill /$skill_name not installed — will install"
+        fi
+    done
+
+    # Check Claude Code rules
+    for rule_file in "$RULES_SRC"/*.md; do
+        local rule_name
+        rule_name="$(basename "$rule_file")"
+        if [ -f "$RULES_DST/$rule_name" ]; then
+            info "Rule $rule_name installed"
+        else
+            warn "Rule $rule_name not installed — will install"
         fi
     done
 
@@ -162,6 +188,56 @@ install_commands() {
     echo ""
 }
 
+install_skills() {
+    local installed=0
+
+    for skill_dir in "$SKILLS_SRC"/*/; do
+        local skill_name
+        skill_name="$(basename "$skill_dir")"
+        local dst_dir="$SKILLS_DST/$skill_name"
+
+        mkdir -p "$dst_dir"
+
+        # Copy all files in the skill directory
+        for skill_file in "$skill_dir"*; do
+            local file_name
+            file_name="$(basename "$skill_file")"
+            if [ -f "$dst_dir/$file_name" ] && diff -q "$skill_file" "$dst_dir/$file_name" &>/dev/null; then
+                : # Already up to date, silent
+            else
+                cp "$skill_file" "$dst_dir/$file_name"
+                installed=1
+            fi
+        done
+
+        if [ "$installed" -eq 1 ]; then
+            info "Skill /$skill_name installed/updated"
+        else
+            info "Skill /$skill_name already up to date"
+        fi
+        installed=0
+    done
+
+    echo ""
+}
+
+install_rules() {
+    mkdir -p "$RULES_DST"
+
+    for rule_file in "$RULES_SRC"/*.md; do
+        local rule_name
+        rule_name="$(basename "$rule_file")"
+        if [ -f "$RULES_DST/$rule_name" ] && diff -q "$rule_file" "$RULES_DST/$rule_name" &>/dev/null; then
+            info "Rule $rule_name already up to date"
+        else
+            cp "$rule_file" "$RULES_DST/$rule_name"
+            info "Rule $rule_name installed"
+        fi
+    done
+
+    echo ""
+}
+
 ensure_mcp_registered() {
     if ! command -v claude &>/dev/null; then
         warn "claude CLI not found — skipping MCP registration"
@@ -214,6 +290,8 @@ case "$MODE" in
         check_install
         deploy_full
         install_commands
+        install_skills
+        install_rules
         ensure_mcp_registered
         run_smoke_test
         info "Full deploy complete!"
@@ -222,6 +300,8 @@ case "$MODE" in
         check_install
         deploy_quick
         install_commands
+        install_skills
+        install_rules
         ensure_mcp_registered
         run_smoke_test
         info "Quick deploy complete!"
