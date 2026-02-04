@@ -8,10 +8,12 @@ set -euo pipefail
 #   ./scripts/deploy.sh --full   # Full: reinstall pipx packages + inject backend + restart MCP
 #   ./scripts/deploy.sh --check  # Check only: show current install state, no changes
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." >/dev/null && pwd)"
 CORE_PKG="$PROJECT_ROOT/packages/leann-core"
 HNSW_PKG="$PROJECT_ROOT/packages/leann-backend-hnsw"
+COMMANDS_SRC="$PROJECT_ROOT/scripts/claude-commands"
+COMMANDS_DST="$HOME/.claude/commands"
 
 MODE="${1:-quick}"
 
@@ -72,6 +74,19 @@ check_install() {
         fi
     done
 
+    # Check Claude Code slash commands
+    local missing_cmds=0
+    for cmd_file in "$COMMANDS_SRC"/*.md; do
+        local cmd_name
+        cmd_name="$(basename "$cmd_file")"
+        if [ -f "$COMMANDS_DST/$cmd_name" ]; then
+            info "Slash command /$(basename "$cmd_name" .md) installed"
+        else
+            warn "Slash command /$(basename "$cmd_name" .md) not installed — will install"
+            missing_cmds=1
+        fi
+    done
+
     # Check MCP registration
     if command -v claude &>/dev/null; then
         if claude mcp list 2>/dev/null | grep -q "leann-server"; then
@@ -118,6 +133,30 @@ deploy_quick() {
         warn "Editable install mismatch or missing — falling back to --full"
         deploy_full
         return
+    fi
+
+    echo ""
+}
+
+install_commands() {
+    mkdir -p "$COMMANDS_DST"
+
+    local installed=0
+    for cmd_file in "$COMMANDS_SRC"/*.md; do
+        local cmd_name
+        cmd_name="$(basename "$cmd_file")"
+        if [ -f "$COMMANDS_DST/$cmd_name" ] && diff -q "$cmd_file" "$COMMANDS_DST/$cmd_name" &>/dev/null; then
+            info "/$(basename "$cmd_name" .md) already up to date"
+        else
+            cp "$cmd_file" "$COMMANDS_DST/$cmd_name"
+            info "/$(basename "$cmd_name" .md) installed"
+            installed=1
+        fi
+    done
+
+    if [ "$installed" -eq 1 ]; then
+        echo ""
+        echo -e "  ${YELLOW}→ Restart Claude Code to pick up new slash commands${NC}"
     fi
 
     echo ""
@@ -174,6 +213,7 @@ case "$MODE" in
     --full)
         check_install
         deploy_full
+        install_commands
         ensure_mcp_registered
         run_smoke_test
         info "Full deploy complete!"
@@ -181,6 +221,7 @@ case "$MODE" in
     quick|*)
         check_install
         deploy_quick
+        install_commands
         ensure_mcp_registered
         run_smoke_test
         info "Quick deploy complete!"
