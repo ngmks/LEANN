@@ -12,13 +12,57 @@ Usage (from LEANN_ROOT):
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
+
+LOCKFILE_PATH = Path.home() / ".leann" / "indexing.lock"
+
 # Make apps/ importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps"))
+
+
+def _warmup_ollama(host: str = "http://localhost:11434", model: str = "leann-bge-m3", rounds: int = 5) -> bool:
+    """
+    Warm up Ollama embedding model to avoid cold start errors.
+
+    Sends a few embedding requests to stabilize the GPU/CUDA kernels
+    before the main indexation starts.
+    """
+    print(f"[LEANN] Warm-up Ollama ({model})...", end=" ", flush=True)
+
+    # Sample texts of varying sizes to warm up different code paths
+    warmup_texts = [
+        "Hello world",
+        "This is a test sentence for warming up the embedding model.",
+        "Claude Code is an AI assistant that helps with software development tasks. " * 3,
+    ]
+
+    success_count = 0
+    for i in range(rounds):
+        try:
+            response = requests.post(
+                f"{host}/api/embed",
+                json={"model": model, "input": warmup_texts},
+                timeout=30,
+            )
+            if response.status_code == 200:
+                success_count += 1
+            else:
+                print(f"⚠", end="", flush=True)
+        except Exception:
+            print(f"✗", end="", flush=True)
+
+    if success_count >= rounds - 1:  # Allow 1 failure
+        print(f"✓ ({success_count}/{rounds})")
+        return True
+    else:
+        print(f"⚠ ({success_count}/{rounds} - continuing anyway)")
+        return False
 
 
 def _build_full_manifest(rag, args) -> dict:
@@ -44,6 +88,24 @@ def _build_full_manifest(rag, args) -> dict:
 
 
 def main() -> None:
+    # Acquire indexation lock (non-blocking — skip if another session is indexing)
+    LOCKFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    lock_fd = open(LOCKFILE_PATH, "w")
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("[LEANN] Indexation déjà en cours par une autre session.")
+        lock_fd.close()
+        return
+
+    try:
+        _run_indexation()
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        lock_fd.close()
+
+
+def _run_indexation() -> None:
     print("[LEANN] Démarrage de l'indexation incrémentale...")
 
     from claude_code_rag import ClaudeCodeRAG, _save_manifest
@@ -52,10 +114,13 @@ def main() -> None:
     args = rag.parser.parse_args([
         "--whitelist-file", str(Path.home() / ".leann" / "whitelist.json"),
         "--embedding-mode", "ollama",
-        "--embedding-model", "bge-m3",
+        "--embedding-model", "leann-bge-m3",
         "--no-compact",
         "--no-recompute",
     ])
+
+    # Warm up Ollama to avoid cold start errors
+    _warmup_ollama(model=args.embedding_model)
 
     index_path = str(Path(args.index_dir) / f"{rag.default_index_name}.leann")
     meta_file = Path(index_path + ".meta.json")

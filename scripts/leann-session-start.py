@@ -6,10 +6,9 @@ Executed via the shared wrapper ~/.leann/hooks/session-start.sh
 which runs: cd $LEANN_ROOT && uv run python scripts/leann-session-start.py
 
 Reads hook input from stdin (JSON), checks the whitelist, computes delta
-for the current project, and either:
-  - Does nothing (not whitelisted or no delta)
-  - Runs inline indexation (small delta, blocking)
-  - Prints a message for Claude to relay (large delta)
+for the current project. If there is a delta, prints a message suggesting
+to run /init-context. Indexation is handled by /init-context (via
+leann-index-progress.py).
 
 Stdout is visible to Claude as session context.
 """
@@ -18,9 +17,7 @@ from __future__ import annotations
 
 import fcntl
 import json
-import re
 import sys
-import time
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -36,16 +33,10 @@ LOCKFILE_PATH = Path.home() / ".leann" / "indexing.lock"
 OLLAMA_CHECK_URL = "http://localhost:11434/api/tags"
 OLLAMA_TIMEOUT = 2  # seconds
 
-INLINE_THRESHOLD_LINES = 500
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def cwd_to_claude_dir(cwd: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9-]", "-", cwd)
-
 
 def load_whitelist() -> dict:
     if WHITELIST_PATH.exists():
@@ -153,70 +144,6 @@ def compute_delta(claude_dir: str) -> dict[str, Any]:
     }
 
 
-def estimate_time(delta_lines: int) -> float:
-    """Rough estimate of indexation time in seconds."""
-    return delta_lines / 50 + 4
-
-
-# ---------------------------------------------------------------------------
-# Inline indexation (small delta)
-# ---------------------------------------------------------------------------
-
-def run_inline_indexation(project_entry: dict) -> tuple[int, int]:
-    """Run incremental indexation for a single project. Returns (sessions, chunks)."""
-    # Import LEANN components (available via uv run)
-    import argparse
-
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps"))
-    from claude_code_rag import ClaudeCodeRAG
-    rag = ClaudeCodeRAG()
-    # Build minimal args
-    args = argparse.Namespace(
-        session_dirs=[str(Path.home() / ".claude" / "projects")],
-        project_filter=project_entry["project_name"],
-        whitelist_file=None,
-        granularity="turn",
-        include_tool_names=True,
-        no_tool_names=False,
-        no_summaries=False,
-        no_agents=False,
-        max_text_per_turn=0,
-        chunk_size=512,
-        chunk_overlap=128,
-        max_items=-1,
-        index_dir=str(DEFAULT_INDEX_DIR),
-        embedding_model="bge-m3",
-        embedding_mode="ollama",
-        embedding_host=None,
-        embedding_api_base=None,
-        embedding_api_key=None,
-        backend_name="hnsw",
-        graph_degree=32,
-        build_complexity=64,
-        search_complexity=32,
-        no_compact=True,
-        no_recompute=True,
-        force_rebuild=False,
-        top_k=20,
-    )
-
-    import asyncio
-
-    async def _do_incremental():
-        chunks, manifest = await rag._incremental_load(args)
-        if chunks:
-            index_path = str(Path(args.index_dir) / f"{rag.default_index_name}.leann")
-            await rag._update_index(args, chunks, index_path)
-            rag._register_index(index_path)
-            from claude_code_rag import _save_manifest
-            _save_manifest(args.index_dir, manifest)
-            return len(manifest.get("sessions", {})), len(chunks)
-        return 0, 0
-
-    sessions, chunks = asyncio.run(_do_incremental())
-    return sessions, chunks
-
-
 # ---------------------------------------------------------------------------
 # Output helpers (stdout → Claude context)
 # ---------------------------------------------------------------------------
@@ -279,72 +206,25 @@ def main() -> None:
 
     total_sessions = delta["new_sessions"] + delta["modified_sessions"]
     delta_lines = delta["delta_lines"]
-    estimated_time = estimate_time(delta_lines)
 
-    # Acquire lock (non-blocking — skip if another session is indexing)
+    # Check if another session is already indexing
     LOCKFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
     lock_fd = open(LOCKFILE_PATH, "w")
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        output_plain(
+            f"[LEANN] {total_sessions} session(s) non indexées "
+            f"({delta_lines} lignes) pour '{project_name}'. "
+            f"Lancez /init-context pour initialiser le contexte."
+        )
     except OSError:
-        # Another session is already indexing
         output_plain(
             f"[LEANN] Indexation déjà en cours par une autre session. "
             f"Delta pour '{project_name}' : {total_sessions} session(s), "
             f"{delta_lines} lignes."
         )
-        lock_fd.close()
-        sys.exit(0)
-
-    try:
-        if delta_lines < INLINE_THRESHOLD_LINES:
-            # Small delta → inline blocking indexation
-            t0 = time.monotonic()
-
-            # Suppress verbose output during inline indexation
-            import io
-            old_stdout = sys.stdout
-            sys.stdout = io.StringIO()
-            try:
-                sessions, chunks = run_inline_indexation(project_entry)
-            except Exception as exc:
-                sys.stdout = old_stdout
-                output_plain(
-                    f"[LEANN] Erreur lors de l'indexation inline : {exc}. "
-                    f"L'indexation sera retentée à la prochaine session."
-                )
-                return
-            finally:
-                sys.stdout = old_stdout
-
-            elapsed = time.monotonic() - t0
-            output_plain(
-                f"[LEANN] Index mis à jour : {total_sessions} session(s), "
-                f"{chunks} chunks indexés en {elapsed:.1f}s."
-            )
-        else:
-            # Large delta → imperative instruction for Claude to ask user
-            leann_root = Path(__file__).resolve().parents[1]
-            cmd = f"cd {leann_root} && uv run python scripts/leann-index-progress.py"
-            output_hook_context(
-                f"ACTION IMMÉDIATE REQUISE — Ne PAS attendre que "
-                f"l'utilisateur pose une question. Tu DOIS exécuter cette "
-                f"action TOUT DE SUITE, comme PREMIÈRE chose dans ta "
-                f"PREMIÈRE réponse, AVANT tout autre contenu :\n"
-                f"Utilise le tool AskUserQuestion IMMÉDIATEMENT avec la "
-                f"question : « {total_sessions} sessions Claude Code "
-                f"({delta_lines} lignes) ne sont pas encore indexées dans "
-                f"LEANN. Lancer l'indexation (~{estimated_time:.0f}s) ? »\n"
-                f"Si l'utilisateur accepte, exécute au PREMIER PLAN "
-                f"(PAS en background, PAS run_in_background) avec un "
-                f"timeout de 600000 : {cmd}",
-                system_message=(
-                    f"[LEANN] {total_sessions} session(s) non indexées "
-                    f"détectées pour '{project_name}'."
-                ),
-            )
     finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
         lock_fd.close()
 
 
