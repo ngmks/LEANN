@@ -35,6 +35,7 @@ EMBEDDING_MODEL_LIMITS = {
     "mxbai-embed-large": 512,
     "all-minilm": 512,
     "bge-m3": 8192,
+    "leann-bge-m3": 8192,
     "snowflake-arctic-embed": 512,
     # OpenAI models
     "text-embedding-3-small": 8192,
@@ -986,6 +987,7 @@ def compute_embeddings_ollama(
         # Filter for embedding models (models that support embeddings)
         embedding_models = []
         suggested_embedding_models = [
+            "leann-bge-m3",
             "nomic-embed-text",
             "mxbai-embed-large",
             "bge-m3",

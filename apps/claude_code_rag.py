@@ -83,7 +83,7 @@ class ClaudeCodeRAG(BaseRAGExample):
 
     def __init__(self):
         self.max_items_default = -1
-        self.embedding_model_default = "bge-m3"
+        self.embedding_model_default = "leann-bge-m3"
         super().__init__(
             name="Claude Code",
             description="Index and query Claude Code session transcripts with LEANN",
@@ -98,7 +98,7 @@ class ClaudeCodeRAG(BaseRAGExample):
                 action.default = default_index_dir
                 action.help = f"Directory to store the index (default: {default_index_dir})"
                 break
-        # Override default embedding-mode to ollama (bge-m3 is an Ollama model)
+        # Override default embedding-mode to ollama (leann-bge-m3 is an Ollama model)
         for action in self.parser._actions:
             if hasattr(action, "option_strings") and "--embedding-mode" in action.option_strings:
                 action.default = "ollama"
