@@ -1,0 +1,4 @@
+Flash_OFF+ctx4096 | [BENCH] load=4.2s | build=192.4s | total=196.6s | chunks=12774
+Flash_OFF+ctx8192 | [BENCH] load=4.3s | build=193.0s | total=197.4s | chunks=12775
+Flash_ON+ctx4096 | [BENCH] load=4.2s | build=290.0s | total=294.1s | chunks=12775
+Flash_ON+ctx8192 | [BENCH] load=4.2s | build=290.4s | total=294.6s | chunks=12776

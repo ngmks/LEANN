@@ -1,0 +1,90 @@
+[
+  {
+    "label": "Flash_OFF + num_ctx=4096",
+    "model": "bench-bge-m3-4k",
+    "batch_size": 128,
+    "total_texts": 2688,
+    "n_batches": 21,
+    "successful_batches": 0,
+    "failed_batches": 21,
+    "total_time_s": 0,
+    "avg_batch_s": 0,
+    "texts_per_sec": 0,
+    "min_batch_s": 0,
+    "max_batch_s": 0,
+    "error_rate_pct": 100.0,
+    "sample_errors": [
+      "{\"error\":\"model \\\"bench-bge-m3-4k\\\" not found, try pulling it first\"}",
+      "{\"error\":\"model \\\"bench-bge-m3-4k\\\" not found, try pulling it first\"}",
+      "{\"error\":\"model \\\"bench-bge-m3-4k\\\" not found, try pulling it first\"}"
+    ],
+    "flash_attention": false,
+    "num_ctx": 4096
+  },
+  {
+    "label": "Flash_OFF + num_ctx=8192",
+    "model": "bench-bge-m3-8k",
+    "batch_size": 128,
+    "total_texts": 2688,
+    "n_batches": 21,
+    "successful_batches": 0,
+    "failed_batches": 21,
+    "total_time_s": 0,
+    "avg_batch_s": 0,
+    "texts_per_sec": 0,
+    "min_batch_s": 0,
+    "max_batch_s": 0,
+    "error_rate_pct": 100.0,
+    "sample_errors": [
+      "{\"error\":\"model \\\"bench-bge-m3-8k\\\" not found, try pulling it first\"}",
+      "{\"error\":\"model \\\"bench-bge-m3-8k\\\" not found, try pulling it first\"}",
+      "{\"error\":\"model \\\"bench-bge-m3-8k\\\" not found, try pulling it first\"}"
+    ],
+    "flash_attention": false,
+    "num_ctx": 8192
+  },
+  {
+    "label": "Flash_ON  + num_ctx=4096",
+    "model": "bench-bge-m3-4k",
+    "batch_size": 128,
+    "total_texts": 2688,
+    "n_batches": 21,
+    "successful_batches": 0,
+    "failed_batches": 21,
+    "total_time_s": 0,
+    "avg_batch_s": 0,
+    "texts_per_sec": 0,
+    "min_batch_s": 0,
+    "max_batch_s": 0,
+    "error_rate_pct": 100.0,
+    "sample_errors": [
+      "{\"error\":\"model \\\"bench-bge-m3-4k\\\" not found, try pulling it first\"}",
+      "{\"error\":\"model \\\"bench-bge-m3-4k\\\" not found, try pulling it first\"}",
+      "{\"error\":\"model \\\"bench-bge-m3-4k\\\" not found, try pulling it first\"}"
+    ],
+    "flash_attention": true,
+    "num_ctx": 4096
+  },
+  {
+    "label": "Flash_ON  + num_ctx=8192",
+    "model": "bench-bge-m3-8k",
+    "batch_size": 128,
+    "total_texts": 2688,
+    "n_batches": 21,
+    "successful_batches": 0,
+    "failed_batches": 21,
+    "total_time_s": 0,
+    "avg_batch_s": 0,
+    "texts_per_sec": 0,
+    "min_batch_s": 0,
+    "max_batch_s": 0,
+    "error_rate_pct": 100.0,
+    "sample_errors": [
+      "{\"error\":\"model \\\"bench-bge-m3-8k\\\" not found, try pulling it first\"}",
+      "{\"error\":\"model \\\"bench-bge-m3-8k\\\" not found, try pulling it first\"}",
+      "{\"error\":\"model \\\"bench-bge-m3-8k\\\" not found, try pulling it first\"}"
+    ],
+    "flash_attention": true,
+    "num_ctx": 8192
+  }
+]
