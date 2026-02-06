@@ -16,9 +16,7 @@ from llama_index.core import Document
 from llama_index.core.readers.base import BaseReader
 
 # Entry types we skip entirely
-_SKIP_TYPES = frozenset(
-    {"system", "progress", "file-history-snapshot", "queue-operation"}
-)
+_SKIP_TYPES = frozenset({"system", "progress", "file-history-snapshot", "queue-operation"})
 
 
 class ClaudeCodeReader(BaseReader):
@@ -60,20 +58,14 @@ class ClaudeCodeReader(BaseReader):
                 include_metadata: Whether to attach metadata (default True).
                 project_filter: Only index projects whose name contains this string.
         """
-        base_dirs: list[str] = kwargs.get(
-            "base_dirs", [str(Path.home() / ".claude" / "projects")]
-        )
+        base_dirs: list[str] = kwargs.get("base_dirs", [str(Path.home() / ".claude" / "projects")])
         max_count: int = kwargs.get("max_count", -1)
         include_metadata: bool = kwargs.get("include_metadata", True)
         project_filter: str | None = kwargs.get("project_filter", None)
 
         projects = self._discover_projects(base_dirs)
         if project_filter:
-            projects = {
-                k: v
-                for k, v in projects.items()
-                if project_filter.lower() in k.lower()
-            }
+            projects = {k: v for k, v in projects.items() if project_filter.lower() in k.lower()}
 
         docs: list[Document] = []
         seen_sessions: set[str] = set()
@@ -94,9 +86,7 @@ class ClaudeCodeReader(BaseReader):
                 session_meta.setdefault("project_name", project_name)
                 session_meta.setdefault("project_dir", str(project_dir))
 
-                session_docs = self._parse_session_file(
-                    jsonl_path, session_meta, include_metadata
-                )
+                session_docs = self._parse_session_file(jsonl_path, session_meta, include_metadata)
                 docs.extend(session_docs)
 
                 # Subagents
@@ -152,7 +142,7 @@ class ClaudeCodeReader(BaseReader):
         # Find the last occurrence of "projects" and take everything after
         try:
             idx = len(parts) - 1 - parts[::-1].index("projects")
-            return "-".join(parts[idx + 1:]) if idx + 1 < len(parts) else dir_name
+            return "-".join(parts[idx + 1 :]) if idx + 1 < len(parts) else dir_name
         except ValueError:
             return dir_name
 
@@ -191,9 +181,7 @@ class ClaudeCodeReader(BaseReader):
         if self.include_summaries:
             for entry in entries:
                 if entry.get("type") == "summary":
-                    doc = self._make_summary_doc(
-                        entry, session_id, session_meta, include_metadata
-                    )
+                    doc = self._make_summary_doc(entry, session_id, session_meta, include_metadata)
                     if doc:
                         docs.append(doc)
 
@@ -207,9 +195,7 @@ class ClaudeCodeReader(BaseReader):
                 self._build_message_docs(entries, session_id, session_meta, include_metadata)
             )
         else:  # "turn" (default)
-            docs.extend(
-                self._build_turn_docs(entries, session_id, session_meta, include_metadata)
-            )
+            docs.extend(self._build_turn_docs(entries, session_id, session_meta, include_metadata))
 
         return docs
 
@@ -446,9 +432,7 @@ class ClaudeCodeReader(BaseReader):
 
         # Extract agent_id from filename: agent-aa9d70a.jsonl -> aa9d70a
         agent_id = agent_path.stem.replace("agent-", "")
-        parent_session_id = parent_session_meta.get(
-            "sessionId", agent_path.parent.parent.name
-        )
+        parent_session_id = parent_session_meta.get("sessionId", agent_path.parent.parent.name)
         project_name = parent_session_meta.get("project_name", "")
 
         docs: list[Document] = []
@@ -492,10 +476,9 @@ class ClaudeCodeReader(BaseReader):
             header += f" | {self._format_date(ts)}"
         header += f" | Agent: {agent_id}"
 
+        # B1: Index only agent response, not the prompt (reduces noise from
+        # boilerplate instructions). Store prompt in metadata for reference.
         parts = [header, ""]
-        if prompt_text:
-            parts.append(f"[Prompt]: {prompt_text}")
-            parts.append("")
         if agent_parts:
             agent_text = "\n".join(agent_parts)
             parts.append(f"[Agent]: {agent_text}")
@@ -515,11 +498,14 @@ class ClaudeCodeReader(BaseReader):
                     "agent_id": agent_id,
                     "is_sidechain": True,
                     "session_id": parent_session_id,
+                    "turn_id": f"{parent_session_id}:agent-{agent_id}",
                     "timestamp": ts,
                     "git_branch": branch,
                     "model": model,
                 }
             )
+            if prompt_text:
+                meta["agent_prompt"] = prompt_text[:200]
 
         docs.append(Document(text=text, metadata=meta))
         return docs

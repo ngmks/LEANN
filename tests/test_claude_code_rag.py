@@ -19,10 +19,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "apps"))
 
 from claude_code_data.claude_code_reader import ClaudeCodeReader
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_session_dir(
     base: Path,
@@ -83,9 +83,7 @@ def _tool_result_entry(**extra) -> dict:
         "type": "user",
         "message": {
             "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "toolu_x", "content": "ok"}
-            ],
+            "content": [{"type": "tool_result", "tool_use_id": "toolu_x", "content": "ok"}],
         },
         "timestamp": "2026-01-25T10:01:30Z",
         **extra,
@@ -329,7 +327,9 @@ class TestReaderParseAgents:
             doc = agent_docs[0]
             assert doc.metadata["agent_id"] == "aa9d70a"
             assert doc.metadata["is_sidechain"] is True
-            assert "Find thermostat files" in doc.text
+            assert doc.metadata["turn_id"] == "aaaa-1111:agent-aa9d70a"
+            assert doc.metadata["agent_prompt"] == "Find thermostat files"
+            assert "Find thermostat files" not in doc.text  # prompt stripped from text
             assert "Found thermostat.ts" in doc.text
             assert "[Tool: Grep]" in doc.text
             assert "Agent: aa9d70a" in doc.text
@@ -485,17 +485,12 @@ class TestProjectNameExtraction:
 
     def test_standard_format(self):
         assert (
-            ClaudeCodeReader._extract_project_name(
-                "-home-mks-projects-casagreena-domotic-server"
-            )
+            ClaudeCodeReader._extract_project_name("-home-mks-projects-casagreena-domotic-server")
             == "casagreena-domotic-server"
         )
 
     def test_nested_projects(self):
-        assert (
-            ClaudeCodeReader._extract_project_name("-home-user-projects-my-app")
-            == "my-app"
-        )
+        assert ClaudeCodeReader._extract_project_name("-home-user-projects-my-app") == "my-app"
 
     def test_no_projects_segment(self):
         assert ClaudeCodeReader._extract_project_name("some-random-dir") == "some-random-dir"
@@ -576,7 +571,9 @@ def test_rag_integration():
         )
 
         output = result.stdout + result.stderr
-        assert result.returncode == 0, f"Command failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        assert result.returncode == 0, (
+            f"Command failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
         assert "Index saved to" in output or "Using existing index" in output
         assert "simulated" in output.lower() or "This is a simulated answer" in output
 

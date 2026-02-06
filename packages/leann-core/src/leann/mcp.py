@@ -18,7 +18,9 @@ def _resolve_index_path(index_name: str) -> str:
     for idx in indexes:
         if idx["name"] == index_name:
             return idx["path"]
-    raise ValueError(f"Index '{index_name}' not found in registry. Use leann_list to see available indexes.")
+    raise ValueError(
+        f"Index '{index_name}' not found in registry. Use leann_list to see available indexes."
+    )
 
 
 def _build_turn_index(index_path: str) -> dict[str, list[str]]:
@@ -76,6 +78,12 @@ def _do_search(args: dict) -> str:
         metadata_filters = {}
         if project:
             metadata_filters["project_name"] = {"contains": project}
+        # Normalize YYYY-MM-DD to full ISO 8601 so lexicographic comparison
+        # works against stored timestamps like "2026-02-05T10:08:13.164Z".
+        if date_from and "T" not in date_from:
+            date_from = date_from + "T00:00:00.000Z"
+        if date_to and "T" not in date_to:
+            date_to = date_to + "T23:59:59.999Z"
         if date_from or date_to:
             metadata_filters["timestamp"] = {}
             if date_from:
@@ -85,7 +93,10 @@ def _do_search(args: dict) -> str:
         search_top_k = min(top_k * _PROJECT_FILTER_OVERFETCH, 80)
 
     results = searcher.search(
-        query, top_k=search_top_k, complexity=complexity, gemma=gemma,
+        query,
+        top_k=search_top_k,
+        complexity=complexity,
+        gemma=gemma,
         metadata_filters=metadata_filters,
     )
 
@@ -96,9 +107,13 @@ def _do_search(args: dict) -> str:
 
     # Sort results if requested (before processing loop)
     if sort_by == "date_desc":
-        results.sort(key=lambda r: r.metadata.get("timestamp", "") if r.metadata else "", reverse=True)
+        results.sort(
+            key=lambda r: r.metadata.get("timestamp", "") if r.metadata else "", reverse=True
+        )
     elif sort_by == "date_asc":
-        results.sort(key=lambda r: r.metadata.get("timestamp", "") if r.metadata else "", reverse=False)
+        results.sort(
+            key=lambda r: r.metadata.get("timestamp", "") if r.metadata else "", reverse=False
+        )
     # "relevance" keeps original score-based order
 
     # Build turn index only when needed
@@ -296,9 +311,7 @@ def handle_request(request):
                 return {
                     "jsonrpc": "2.0",
                     "id": request.get("id"),
-                    "result": {
-                        "content": [{"type": "text", "text": text}]
-                    },
+                    "result": {"content": [{"type": "text", "text": text}]},
                 }
 
             elif tool_name == "leann_list":
