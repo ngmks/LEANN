@@ -68,6 +68,16 @@ Si ta première recherche ne donne pas de résultats, **reformule mentalement** 
 }
 ```
 
+### Quick Reference — Combinaisons par cas d'usage
+
+| Cas d'usage | gemma | sort_by | top_k | expand_turns | Notes |
+|-------------|-------|---------|-------|-------------|-------|
+| "Sessions récentes" | 0.0 | date_desc | 10-15 | false | gemma=0.0 **obligatoire** pour tri par date |
+| "Comment j'ai fait X" | 1.0 | relevance | 5 | true | Sémantique pur + contexte complet |
+| Terme exact / erreur | 0.0 | relevance | 5 | false | BM25 pur, mots-clés rares |
+| Question conceptuelle | 1.0 | relevance | 10 | false | Sémantique sans mots-clés exacts |
+| Requête courte/vague | 0.5 | relevance | 5-10 | false | Défaut hybride |
+
 ### Paramètres optionnels selon contexte
 
 | Paramètre | Quand l'utiliser |
@@ -75,7 +85,7 @@ Si ta première recherche ne donne pas de résultats, **reformule mentalement** 
 | `sort_by: "date_desc"` | Recherche temporelle ("dernière", "récent") |
 | `top_k: 1` | "La dernière session" |
 | `top_k: 5-10` | Exploration d'un sujet |
-| `project: "..."` | Filtrer par projet |
+| `project: "..."` | Filtrer par projet (substring match) |
 | `date_from: "YYYY-MM-DD"` | Limiter à une période |
 | `gemma: 1.0` | Question longue/descriptive |
 | `gemma: 0.0` | Terme exact (fonction, erreur) |

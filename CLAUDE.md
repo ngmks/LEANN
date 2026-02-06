@@ -1,152 +1,76 @@
-# CLAUDE.md
+# CLAUDE.md — LEANN Fork (Claude Code RAG)
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Ce fork de LEANN implémente un système de mémoire long-terme pour Claude Code : indexation sémantique des sessions JSONL, recherche hybride via MCP, hooks automatiques, et skills Claude Code.
 
-## Project Overview
+## Architecture du fork
 
-LEANN is a lightweight vector database and RAG (Retrieval-Augmented Generation) system that achieves 97% storage reduction compared to traditional vector databases through graph-based selective recomputation. It enables semantic search across various data sources (emails, browser history, chat history, code, documents) on a single laptop without cloud dependencies.
+### Pipeline d'indexation
 
-## Build & Development Commands
-
-```bash
-# Install uv first (required package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Development setup (from source)
-git submodule update --init --recursive
-
-# macOS
-brew install libomp boost protobuf zeromq pkgconf
-uv sync --extra diskann
-
-# Ubuntu/Debian
-sudo apt-get install libomp-dev libboost-all-dev protobuf-compiler \
-    libabsl-dev libmkl-full-dev libaio-dev libzmq3-dev
-uv sync --extra diskann
-
-# Install lint tools
-uv sync --group lint
-
-# Install test tools
-uv sync --group test
+```
+Sessions JSONL → ClaudeCodeRAG → Ollama (qwen3-embedding:4b) → Index HNSW
+~/.claude/projects/<dir>/*.jsonl    apps/claude_code_rag.py              ~/.leann/indexes/claude-code-sessions/
 ```
 
-## Testing
+- **Mode** : `--no-recompute --no-compact` (embeddings stockés dans l'index, recherche 68× plus rapide)
+- **Modèle** : `qwen3-embedding:4b` (4B params, 2560 dims, instruction-aware via `query_prompt_template`)
+- **Chunks** : 512 tokens, overlap 128
+
+### Fichiers clés du fork
+
+| Fichier | Rôle |
+|---|---|
+| `apps/claude_code_rag.py` | RAG principal : chargement sessions, indexation incrémentale, mise à jour |
+| `apps/base_rag_example.py` | Classe de base partagée par toutes les apps RAG |
+| `scripts/leann-index-progress.py` | Script d'indexation avec progression (lancé par `/init-context`) |
+| `scripts/leann-session-start.py` | Hook `SessionStart` : détecte le delta et suggère `/init-context` |
+| `scripts/leann-extract-tasks.py` | Extraction de tâches depuis les sessions JSONL |
+| `scripts/deploy.sh` | Déploiement : pipx install, skills, rules, MCP server |
+| `scripts/claude-skills/` | Skills Claude Code (`init-context`, `leann-search`) |
+| `scripts/claude-rules/` | Règles Claude Code (`task-memory`, `leann-search`) |
+
+### Core LEANN (upstream)
+
+| Fichier | Rôle |
+|---|---|
+| `packages/leann-core/src/leann/api.py` | `LeannBuilder`, `LeannSearcher`, `LeannChat` |
+| `packages/leann-core/src/leann/embedding_compute.py` | Calcul d'embeddings (Ollama, sentence-transformers, OpenAI) |
+| `packages/leann-core/src/leann/mcp.py` | Serveur MCP (agnostique du modèle d'embedding) |
+| `packages/leann-backend-hnsw/` | Backend FAISS HNSW |
+
+## Commandes courantes
 
 ```bash
-# Run all tests
-uv run pytest
+# Indexation manuelle (avec progression)
+uv run python scripts/leann-index-progress.py
 
-# Run specific test file
-uv run pytest tests/test_basic.py
+# Déploiement (skills, rules, MCP)
+bash scripts/deploy.sh --check   # vérifier l'état
+bash scripts/deploy.sh           # déploiement rapide
+bash scripts/deploy.sh --full    # réinstallation complète
 
-# Run with coverage
-uv run pytest --cov=leann
+# Tests
+uv run pytest -m "not slow and not openai" -x
 
-# Skip slow tests
-uv run pytest -m "not slow"
-
-# Skip tests requiring OpenAI API
-uv run pytest -m "not openai"
+# Lint
+ruff format && ruff check --fix
 ```
 
-Test markers: `slow`, `openai`, `integration`
+## Configuration
 
-## Code Quality
+- **Ollama** : Flash Attention configurée dans `/etc/systemd/system/ollama.service.d/override.conf`
+- **Whitelist projets** : `~/.leann/whitelist.json`
+- **Index** : `~/.leann/indexes/claude-code-sessions/`
+- **Manifest** : `indexed_sessions.json` (tracking mtime + lines par session)
+- **MCP server** : `leann_mcp` installé via pipx (editable)
 
-```bash
-# Format code
-ruff format
+## Index LEANN
 
-# Lint with auto-fix
-ruff check --fix
+Structure d'un index :
+- `<name>.meta.json` : métadonnées (modèle, dimensions, `embedding_options` dont `query_prompt_template`)
+- `<name>.passages.jsonl` : chunks texte avec métadonnées
+- `<name>.passages.idx` : offset map pour lookup rapide
+- `<name>.index` : index vectoriel HNSW
 
-# Pre-commit hooks (install once)
-pre-commit install
+## Python
 
-# Run pre-commit manually
-uv run pre-commit run --all-files
-```
-
-## Architecture
-
-### Core API Layer (`packages/leann-core/src/leann/`)
-
-- `api.py`: Main APIs - `LeannBuilder`, `LeannSearcher`, `LeannChat`
-- `react_agent.py`: `ReActAgent` for multi-turn reasoning
-- `cli.py`: CLI implementation (`leann build`, `leann search`, `leann ask`)
-- `chat.py`: LLM provider integrations (OpenAI, Ollama, HuggingFace, Anthropic)
-- `embedding_compute.py`: Embedding computation (sentence-transformers, MLX, OpenAI)
-- `metadata_filter.py`: Search result filtering by metadata
-
-### Backend Layer (`packages/`)
-
-- `leann-backend-hnsw/`: Default backend using FAISS HNSW for fast in-memory search
-- `leann-backend-diskann/`: DiskANN backend for larger-than-memory datasets
-- `leann-mcp/`: MCP server for Claude Code integration
-
-Backends are auto-discovered via `leann-backend-*` naming convention and registered in `registry.py`.
-
-### RAG Applications (`apps/`)
-
-Example applications demonstrating RAG on various data sources:
-- `document_rag.py`: PDF/TXT/MD documents
-- `email_rag.py`: Apple Mail
-- `browser_rag.py`: Chrome browser history
-- `wechat_rag.py`, `imessage_rag.py`: Chat history
-- `code_rag.py`: Codebase search with AST-aware chunking
-- `slack_rag.py`, `twitter_rag.py`: MCP-based live data
-
-## Key Design Patterns
-
-### Threading Environment Variables
-
-LEANN sets critical threading environment variables in `__init__.py` to prevent FAISS/ZMQ hangs:
-- macOS: `OMP_NUM_THREADS=1`, `MKL_NUM_THREADS=1`, `KMP_DUPLICATE_LIB_OK=TRUE`
-- Linux: `OMP_NUM_THREADS=1`, `FAISS_NUM_THREADS=1`, `OMP_WAIT_POLICY=PASSIVE`
-
-### Index Structure
-
-A LEANN index consists of:
-- `<name>.meta.json`: Metadata (backend, embedding model, dimensions)
-- `<name>.passages.jsonl`: Raw text chunks with metadata
-- `<name>.passages.idx`: Offset map for fast passage lookup
-- `<name>.index`: Backend-specific vector index
-
-### Embedding Recomputation
-
-The core storage optimization: instead of storing embeddings, LEANN stores a pruned graph and recomputes embeddings on-demand during search via ZMQ server communication.
-
-## CLI Usage
-
-```bash
-# Build index
-leann build my-docs --docs ./documents/
-
-# Search
-leann search my-docs "query"
-
-# Interactive chat
-leann ask my-docs --interactive
-
-# List indexes
-leann list
-
-# Remove index
-leann remove my-docs
-```
-
-## Common Development Tasks
-
-Running example RAG applications:
-```bash
-# Document RAG (easiest to test)
-python -m apps.document_rag --query "What is LEANN?"
-
-# Code RAG
-python -m apps.code_rag --repo-dir ./src --query "How does search work?"
-```
-
-## Python Version
-
-Requires Python 3.10+ (uses PEP 604 union syntax `X | Y`).
+Requiert Python 3.10+ (syntaxe union PEP 604 `X | Y`).

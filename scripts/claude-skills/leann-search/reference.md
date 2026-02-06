@@ -95,13 +95,15 @@ mcp-cli call leann-server/leann_search '{"index_name": "INDEX", "query": "discus
 | `date_desc` | Plus récent d'abord |
 | `date_asc` | Plus ancien d'abord |
 
+⚠️ **Couplage sort_by + gemma** : `sort_by` applique un POST-TRI sur les résultats retournés par la recherche hybride. Avec `gemma=1.0` (sémantique pur), les résultats sont issus du seul index vectoriel — leur timestamp peut être distribué de manière non uniforme, rendant le tri temporel peu fiable. **Utilise `gemma=0.0` (BM25 pur) avec `sort_by=date_desc/asc`** pour un tri temporel fiable, car BM25 retourne un échantillon plus large et mieux distribué temporellement.
+
 **Exemples :**
 ```bash
-# Trouver les discussions les plus récentes
-mcp-cli call leann-server/leann_search '{"index_name": "claude-code-sessions", "query": "authentication", "sort_by": "date_desc", "top_k": 10, "show_metadata": true}'
+# Trouver les discussions les plus récentes (gemma=0.0 obligatoire)
+mcp-cli call leann-server/leann_search '{"index_name": "claude-code-sessions", "query": "session", "sort_by": "date_desc", "gemma": 0.0, "top_k": 10, "show_metadata": true}'
 
 # Voir l'évolution chronologique d'un sujet
-mcp-cli call leann-server/leann_search '{"index_name": "claude-code-sessions", "query": "refactoring API", "sort_by": "date_asc", "top_k": 10, "show_metadata": true}'
+mcp-cli call leann-server/leann_search '{"index_name": "claude-code-sessions", "query": "refactoring API", "sort_by": "date_asc", "gemma": 0.0, "top_k": 10, "show_metadata": true}'
 ```
 
 ### `date_from` / `date_to` — Filtrage par plage de dates
@@ -245,14 +247,27 @@ mcp-cli call leann-server/leann_search '{"index_name": "claude-code-sessions", "
 | 64 | Haute précision, index larges |
 | 128 | Rappel maximum, coûteux |
 
+## Guide `expand_turns` — Coûts et bénéfices
+
+| Mode | Taille résultat | Quand utiliser |
+|------|----------------|----------------|
+| `expand_turns=false` | ~500 car./résultat (chunk) | Exploration rapide, survol, beaucoup de résultats |
+| `expand_turns=true` | ~2-5 Ko/résultat (turn complet) | Contexte complet nécessaire (question+réponse+code) |
+| `entry_type=insight` (post-filtre) | ~200 car./résultat | Aperçu pédagogique rapide, pas besoin de expand |
+
+**Règle** : Commence sans `expand_turns`, active-le seulement si les chunks manquent de contexte.
+
+**Déduplication** : Avec `expand_turns=true`, les chunks d'un même turn sont fusionnés (via `turn_id`). Le nombre de résultats peut être inférieur à `top_k`.
+
 ## Bonnes pratiques
 
 1. **TOUJOURS `show_metadata=true`** - Les métadonnées sont essentielles
 2. **Commencer par `leann_list`** - Découvre les index disponibles
 3. **Ajuster `gemma` selon la requête** - Pas de one-size-fits-all
-4. **Utiliser `expand_turns` avec parcimonie** - Augmente la taille des résultats
-5. **Filtrer par `project`** quand pertinent - Réduit le bruit
-6. **Faire plusieurs recherches** - Angles différents = meilleurs résultats
+4. **`gemma=0.0` obligatoire avec `sort_by`** - Le tri temporel repose sur BM25
+5. **`expand_turns` avec parcimonie** - Augmente la taille, utile seulement quand le contexte complet est nécessaire
+6. **Filtrer par `project`** quand pertinent - Réduit le bruit (substring match)
+7. **Faire plusieurs recherches** - Angles différents = meilleurs résultats
 
 ## Exemples de requêtes types
 
