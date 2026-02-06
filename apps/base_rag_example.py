@@ -292,6 +292,11 @@ class BaseRAGExample(ABC):
         embedding_options: dict[str, Any] = {}
         if args.embedding_mode == "ollama":
             embedding_options["host"] = resolve_ollama_host(args.embedding_host)
+            if "qwen3-embedding" in args.embedding_model:
+                embedding_options["query_prompt_template"] = (
+                    "Instruct: Given a developer question, retrieve relevant Claude Code "
+                    "session segments that answer the query\nQuery: "
+                )
         elif args.embedding_mode == "openai":
             embedding_options["base_url"] = resolve_openai_base_url(args.embedding_api_base)
             resolved_embedding_key = resolve_openai_api_key(args.embedding_api_key)

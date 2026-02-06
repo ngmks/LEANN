@@ -5,6 +5,7 @@ Supports incremental updates via a manifest file that tracks which
 sessions have already been indexed.
 """
 
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -16,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from base_rag_example import BaseRAGExample
 from chunking import create_text_chunks
-
 from claude_code_data.claude_code_reader import ClaudeCodeReader
 
 # Keys from ClaudeCodeReader metadata to preserve through chunking.
@@ -32,7 +32,28 @@ _CLAUDE_CODE_METADATA_KEYS = [
     "timestamp",
     "git_branch",
     "model",
+    "agent_prompt",
 ]
+
+
+def _deduplicate_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove duplicate chunks by content hash (MD5).
+
+    Eliminates exact duplicates caused by content being read and then
+    re-emitted in session responses (e.g. MEMORY.md via /init-context).
+    """
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for chunk in chunks:
+        h = hashlib.md5(chunk.get("text", "").encode()).hexdigest()
+        if h not in seen:
+            seen.add(h)
+            deduped.append(chunk)
+    removed = len(chunks) - len(deduped)
+    if removed:
+        print(f"Deduplication: removed {removed} duplicate chunk(s)")
+    return deduped
+
 
 # ---------------------------------------------------------------------------
 # Manifest helpers
@@ -83,22 +104,20 @@ class ClaudeCodeRAG(BaseRAGExample):
 
     def __init__(self):
         self.max_items_default = -1
-        self.embedding_model_default = "leann-bge-m3"
+        self.embedding_model_default = "qwen3-embedding:4b"
         super().__init__(
             name="Claude Code",
             description="Index and query Claude Code session transcripts with LEANN",
             default_index_name="claude_code_sessions_index",
         )
         # Override default index-dir to ~/.leann/indexes/claude-code-sessions
-        default_index_dir = str(
-            Path.home() / ".leann" / "indexes" / "claude-code-sessions"
-        )
+        default_index_dir = str(Path.home() / ".leann" / "indexes" / "claude-code-sessions")
         for action in self.parser._actions:
             if hasattr(action, "option_strings") and "--index-dir" in action.option_strings:
                 action.default = default_index_dir
                 action.help = f"Directory to store the index (default: {default_index_dir})"
                 break
-        # Override default embedding-mode to ollama (leann-bge-m3 is an Ollama model)
+        # Override default embedding-mode to ollama (qwen3-embedding:4b is an Ollama model)
         for action in self.parser._actions:
             if hasattr(action, "option_strings") and "--embedding-mode" in action.option_strings:
                 action.default = "ollama"
@@ -220,6 +239,7 @@ class ClaudeCodeRAG(BaseRAGExample):
             chunk_overlap=args.chunk_overlap,
             extra_metadata_keys=_CLAUDE_CODE_METADATA_KEYS,
         )
+        chunks = _deduplicate_chunks(chunks)
         print(f"Created {len(chunks)} text chunks")
         return chunks
 
@@ -391,6 +411,7 @@ class ClaudeCodeRAG(BaseRAGExample):
             chunk_overlap=args.chunk_overlap,
             extra_metadata_keys=_CLAUDE_CODE_METADATA_KEYS,
         )
+        chunks = _deduplicate_chunks(chunks)
         print(f"Incremental: {len(all_documents)} new documents -> {len(chunks)} chunks")
 
         manifest["sessions"] = indexed
@@ -466,9 +487,7 @@ class ClaudeCodeRAG(BaseRAGExample):
                             manifest["sessions"][sid] = {
                                 "mtime": _file_mtime(path),
                                 "lines_indexed": _count_lines(path),
-                                "project": ClaudeCodeReader._extract_project_name(
-                                    project_dir.name
-                                ),
+                                "project": ClaudeCodeReader._extract_project_name(project_dir.name),
                             }
                         _save_manifest(args.index_dir, manifest)
             else:
@@ -485,13 +504,12 @@ class ClaudeCodeRAG(BaseRAGExample):
         """Register the index in the global LEANN registry for MCP discovery."""
         try:
             from leann.registry import register_index
+
             register_index("claude-code-sessions", index_path, index_type="app")
         except Exception:
             pass  # Non-critical — index still works without registry
 
-    async def _update_index(
-        self, args, chunks: list[dict[str, Any]], index_path: str
-    ) -> str:
+    async def _update_index(self, args, chunks: list[dict[str, Any]], index_path: str) -> str:
         """Append new chunks to existing index using LeannBuilder.update_index()."""
         from leann.api import LeannBuilder
 
@@ -506,6 +524,11 @@ class ClaudeCodeRAG(BaseRAGExample):
         embedding_options: dict[str, Any] = {}
         if args.embedding_mode == "ollama":
             embedding_options["host"] = resolve_ollama_host(args.embedding_host)
+            if "qwen3-embedding" in args.embedding_model:
+                embedding_options["query_prompt_template"] = (
+                    "Instruct: Given a developer question, retrieve relevant Claude Code "
+                    "session segments that answer the query\nQuery: "
+                )
 
         builder = LeannBuilder(
             backend_name=args.backend_name,

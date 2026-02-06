@@ -26,7 +26,9 @@ LOCKFILE_PATH = Path.home() / ".leann" / "indexing.lock"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps"))
 
 
-def _warmup_ollama(host: str = "http://localhost:11434", model: str = "leann-bge-m3", rounds: int = 5) -> bool:
+def _warmup_ollama(
+    host: str = "http://localhost:11434", model: str = "qwen3-embedding:4b", rounds: int = 5
+) -> bool:
     """
     Warm up Ollama embedding model to avoid cold start errors.
 
@@ -53,9 +55,9 @@ def _warmup_ollama(host: str = "http://localhost:11434", model: str = "leann-bge
             if response.status_code == 200:
                 success_count += 1
             else:
-                print(f"⚠", end="", flush=True)
+                print("⚠", end="", flush=True)
         except Exception:
-            print(f"✗", end="", flush=True)
+            print("✗", end="", flush=True)
 
     if success_count >= rounds - 1:  # Allow 1 failure
         print(f"✓ ({success_count}/{rounds})")
@@ -67,8 +69,8 @@ def _warmup_ollama(host: str = "http://localhost:11434", model: str = "leann-bge
 
 def _build_full_manifest(rag, args) -> dict:
     """Build and save a full manifest after a complete index build."""
-    from claude_code_rag import _count_lines, _file_mtime, _save_manifest
     from claude_code_data.claude_code_reader import ClaudeCodeReader
+    from claude_code_rag import _count_lines, _file_mtime, _save_manifest
 
     session_files = rag._discover_session_files(args)
     manifest = {
@@ -111,13 +113,18 @@ def _run_indexation() -> None:
     from claude_code_rag import ClaudeCodeRAG, _save_manifest
 
     rag = ClaudeCodeRAG()
-    args = rag.parser.parse_args([
-        "--whitelist-file", str(Path.home() / ".leann" / "whitelist.json"),
-        "--embedding-mode", "ollama",
-        "--embedding-model", "leann-bge-m3",
-        "--no-compact",
-        "--no-recompute",
-    ])
+    args = rag.parser.parse_args(
+        [
+            "--whitelist-file",
+            str(Path.home() / ".leann" / "whitelist.json"),
+            "--embedding-mode",
+            "ollama",
+            "--embedding-model",
+            "qwen3-embedding:4b",
+            "--no-compact",
+            "--no-recompute",
+        ]
+    )
 
     # Warm up Ollama to avoid cold start errors
     _warmup_ollama(model=args.embedding_model)
@@ -129,21 +136,34 @@ def _run_indexation() -> None:
         print("[LEANN] Aucun index existant. Lancement d'un build complet...")
         t0 = time.monotonic()
 
+        print("[LEANN] Phase 1/3 — Chargement des sessions...", flush=True)
         texts = asyncio.run(rag.load_data(args))
         if not texts:
             print("[LEANN] Aucune donnée trouvée !")
             return
+        t_load = time.monotonic() - t0
 
-        print(f"[LEANN] {len(texts)} chunks à indexer...")
+        session_files = rag._discover_session_files(args)
+        print(
+            f"[LEANN] Phase 2/3 — Construction de l'index "
+            f"({len(session_files)} sessions, {len(texts)} chunks)...",
+            flush=True,
+        )
+        t1 = time.monotonic()
         built_path = asyncio.run(rag.build_index(args, texts))
+        t_build = time.monotonic() - t1
+
         rag._register_index(built_path)
         _build_full_manifest(rag, args)
         elapsed = time.monotonic() - t0
-        print(f"[LEANN] Terminé ! {len(texts)} chunks indexés en {elapsed:.1f}s.")
+        print(
+            f"[LEANN] Terminé ! {len(texts)} chunks indexés en {elapsed:.1f}s "
+            f"(chargement {t_load:.1f}s, build {t_build:.1f}s)."
+        )
         return
 
     # Incremental update
-    print("[LEANN] Scanning sessions...")
+    print("[LEANN] Scanning sessions...", flush=True)
     t0 = time.monotonic()
 
     chunks, manifest = asyncio.run(rag._incremental_load(args))
@@ -152,20 +172,25 @@ def _run_indexation() -> None:
         print("[LEANN] Index déjà à jour — rien à faire.")
         return
 
-    print(f"[LEANN] {len(chunks)} chunks à indexer...")
+    t_load = time.monotonic() - t0
+    print(f"[LEANN] {len(chunks)} chunks à indexer (scan {t_load:.1f}s)...", flush=True)
 
     try:
+        t1 = time.monotonic()
         asyncio.run(rag._update_index(args, chunks, index_path))
         rag._register_index(index_path)
         _save_manifest(args.index_dir, manifest)
+        t_build = time.monotonic() - t1
     except Exception as e:
         print(f"[LEANN] Erreur update_index : {e}")
         print("[LEANN] Fallback : reconstruction complète...")
+        t1 = time.monotonic()
         texts = asyncio.run(rag.load_data(args))
         if texts:
             built_path = asyncio.run(rag.build_index(args, texts))
             rag._register_index(built_path)
             _build_full_manifest(rag, args)
+        t_build = time.monotonic() - t1
 
     elapsed = time.monotonic() - t0
     print(f"[LEANN] Terminé ! {len(chunks)} chunks indexés en {elapsed:.1f}s.")
