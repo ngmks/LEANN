@@ -4,7 +4,7 @@ set -euo pipefail
 # Deploy LEANN to local environment (pipx + Claude Code MCP)
 #
 # Usage:
-#   ./scripts/deploy.sh          # Quick: verify editable install + restart MCP
+#   ./scripts/deploy.sh          # Quick: verify editable install + rebuild HNSW if needed + restart MCP
 #   ./scripts/deploy.sh --full   # Full: reinstall pipx packages + inject backend + restart MCP
 #   ./scripts/deploy.sh --check  # Check only: show current install state, no changes
 
@@ -12,12 +12,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." >/dev/null && pwd)"
 CORE_PKG="$PROJECT_ROOT/packages/leann-core"
 HNSW_PKG="$PROJECT_ROOT/packages/leann-backend-hnsw"
+PIPX_VENV="$HOME/.local/share/pipx/venvs/leann-core"
+LOCAL_VENV="$PROJECT_ROOT/.venv"
 COMMANDS_SRC="$PROJECT_ROOT/scripts/claude-commands"
 COMMANDS_DST="$HOME/.claude/commands"
 SKILLS_SRC="$PROJECT_ROOT/scripts/claude-skills"
 SKILLS_DST="$HOME/.claude/skills"
 RULES_SRC="$PROJECT_ROOT/scripts/claude-rules"
 RULES_DST="$HOME/.claude/rules"
+HOOKS_DST="$HOME/.leann/hooks"
 
 MODE="${1:-quick}"
 
@@ -25,11 +28,28 @@ MODE="${1:-quick}"
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 info()  { echo -e "${GREEN}✓${NC} $1"; }
 warn()  { echo -e "${YELLOW}⚠${NC} $1"; }
 error() { echo -e "${RED}✗${NC} $1"; }
+step()  { echo -e "${BLUE}→${NC} $1"; }
+
+# Find _swigfaiss.so in a Python venv directory
+find_hnsw_so() {
+    find "$1" -name "_swigfaiss.so" -print -quit 2>/dev/null
+}
+
+# Get mtime as epoch seconds
+file_mtime() {
+    stat -c "%Y" "$1" 2>/dev/null
+}
+
+# Format epoch to human-readable
+fmt_date() {
+    date -d "@$1" '+%Y-%m-%d %H:%M' 2>/dev/null
+}
 
 check_install() {
     echo "=== LEANN Install Status ==="
@@ -67,6 +87,25 @@ check_install() {
     else
         error "leann-backend-hnsw not injected — run with --full"
         return 1
+    fi
+
+    # Check HNSW native extension (.so) freshness
+    local pipx_so local_so
+    pipx_so=$(find_hnsw_so "$PIPX_VENV")
+    local_so=$(find_hnsw_so "$LOCAL_VENV")
+    if [ -n "$pipx_so" ] && [ -n "$local_so" ]; then
+        local pipx_mtime local_mtime
+        pipx_mtime=$(file_mtime "$pipx_so")
+        local_mtime=$(file_mtime "$local_so")
+        if [ "$local_mtime" -gt "$pipx_mtime" ]; then
+            warn "_swigfaiss.so outdated in pipx ($(fmt_date "$pipx_mtime")) vs .venv ($(fmt_date "$local_mtime")) — quick deploy will rebuild"
+        else
+            info "_swigfaiss.so up to date in pipx ($(fmt_date "$pipx_mtime"))"
+        fi
+    elif [ -z "$pipx_so" ]; then
+        error "_swigfaiss.so missing from pipx venv — run with --full"
+    elif [ -z "$local_so" ]; then
+        warn "_swigfaiss.so not found in local .venv — cannot compare"
     fi
 
     # Check CLIs
@@ -113,6 +152,13 @@ check_install() {
         fi
     done
 
+    # Check hooks
+    if [ -f "$HOOKS_DST/session-start.sh" ] && [ -x "$HOOKS_DST/session-start.sh" ]; then
+        info "Hook session-start.sh installed"
+    else
+        warn "Hook session-start.sh missing or not executable — will install"
+    fi
+
     # Check MCP registration
     if command -v claude &>/dev/null; then
         if claude mcp list 2>/dev/null | grep -q "leann-server"; then
@@ -145,6 +191,50 @@ deploy_full() {
     echo ""
 }
 
+rebuild_hnsw_if_needed() {
+    local pipx_so local_so
+    pipx_so=$(find_hnsw_so "$PIPX_VENV")
+    local_so=$(find_hnsw_so "$LOCAL_VENV")
+
+    if [ -z "$pipx_so" ]; then
+        warn "No _swigfaiss.so in pipx venv — injecting HNSW backend..."
+        step "pipx inject leann-core -e $HNSW_PKG --force (this compiles C++, may take a few minutes)"
+        pipx inject leann-core -e "$HNSW_PKG" --force 2>&1 | tail -5
+        info "HNSW backend injected"
+        return
+    fi
+
+    if [ -z "$local_so" ]; then
+        warn "No _swigfaiss.so in local .venv — skipping rebuild check"
+        return
+    fi
+
+    local pipx_mtime local_mtime
+    pipx_mtime=$(file_mtime "$pipx_so")
+    local_mtime=$(file_mtime "$local_so")
+
+    if [ "$local_mtime" -gt "$pipx_mtime" ]; then
+        warn "pipx _swigfaiss.so outdated: $(fmt_date "$pipx_mtime") vs .venv $(fmt_date "$local_mtime")"
+        step "Rebuilding HNSW backend in pipx venv (C++ compilation, may take a few minutes)..."
+        pipx inject leann-core -e "$HNSW_PKG" --force 2>&1 | tail -5
+        # Verify rebuild
+        local new_so new_mtime
+        new_so=$(find_hnsw_so "$PIPX_VENV")
+        if [ -n "$new_so" ]; then
+            new_mtime=$(file_mtime "$new_so")
+            if [ "$new_mtime" -gt "$pipx_mtime" ]; then
+                info "HNSW backend rebuilt ($(fmt_date "$new_mtime"))"
+            else
+                error "Rebuild may have failed — .so mtime unchanged"
+            fi
+        else
+            error "Rebuild failed — _swigfaiss.so missing after inject"
+        fi
+    else
+        info "HNSW native extension up to date ($(fmt_date "$pipx_mtime"))"
+    fi
+}
+
 deploy_quick() {
     echo "=== Quick Deploy ==="
     echo ""
@@ -154,12 +244,15 @@ deploy_quick() {
     location=$(pipx runpip leann-core show leann-core 2>/dev/null | grep "Editable project location" | cut -d: -f2- | xargs)
 
     if [ "$location" = "$CORE_PKG" ]; then
-        info "Editable install points to source — code changes are live"
+        info "Editable install points to source — Python code changes are live"
     else
         warn "Editable install mismatch or missing — falling back to --full"
         deploy_full
         return
     fi
+
+    # Check and rebuild HNSW native extension if .venv has a newer build
+    rebuild_hnsw_if_needed
 
     echo ""
 }
@@ -238,6 +331,33 @@ install_rules() {
     echo ""
 }
 
+install_hooks() {
+    mkdir -p "$HOOKS_DST"
+
+    # Install session-start hook (derives LEANN_ROOT from pipx editable install)
+    local hook_shell="$HOOKS_DST/session-start.sh"
+    local expected_content
+    expected_content=$(cat <<'HOOKEOF'
+#!/bin/bash
+# LEANN SessionStart hook — derive LEANN_ROOT from the editable pipx install.
+# Shared by all whitelisted projects.
+LEANN_PYTHON="$(dirname "$(readlink -f "$(which leann)")")/python"
+LEANN_ROOT="$("$LEANN_PYTHON" -c 'from pathlib import Path; import leann; print(Path(leann.__file__).resolve().parents[4])')"
+cd "$LEANN_ROOT" && uv run python scripts/leann-session-start.py
+HOOKEOF
+    )
+
+    if [ -f "$hook_shell" ] && [ "$(cat "$hook_shell")" = "$expected_content" ]; then
+        info "Hook session-start.sh already up to date"
+    else
+        echo "$expected_content" > "$hook_shell"
+        chmod +x "$hook_shell"
+        info "Hook session-start.sh installed"
+    fi
+
+    echo ""
+}
+
 ensure_mcp_registered() {
     if ! command -v claude &>/dev/null; then
         warn "claude CLI not found — skipping MCP registration"
@@ -292,6 +412,7 @@ case "$MODE" in
         install_commands
         install_skills
         install_rules
+        install_hooks
         ensure_mcp_registered
         run_smoke_test
         info "Full deploy complete!"
@@ -302,6 +423,7 @@ case "$MODE" in
         install_commands
         install_skills
         install_rules
+        install_hooks
         ensure_mcp_registered
         run_smoke_test
         info "Quick deploy complete!"

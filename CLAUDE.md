@@ -24,9 +24,10 @@ Sessions JSONL → ClaudeCodeRAG → Ollama (qwen3-embedding:4b) → Index HNSW
 | `scripts/leann-index-progress.py` | Script d'indexation avec progression (lancé par `/init-context`) |
 | `scripts/leann-session-start.py` | Hook `SessionStart` : détecte le delta et suggère `/init-context` |
 | `scripts/leann-extract-tasks.py` | Extraction de tâches depuis les sessions JSONL |
-| `scripts/deploy.sh` | Déploiement : pipx install, skills, rules, MCP server |
+| `scripts/deploy.sh` | Déploiement : pipx, HNSW rebuild auto, skills, rules, hooks, MCP |
 | `scripts/claude-skills/` | Skills Claude Code (`init-context`, `leann-search`) |
 | `scripts/claude-rules/` | Règles Claude Code (`task-memory`, `leann-search`) |
+| `.claude/settings.local.json` | Hook `SessionStart` → `~/.leann/hooks/session-start.sh` (par projet, gitignored) |
 
 ### Core LEANN (upstream)
 
@@ -43,10 +44,10 @@ Sessions JSONL → ClaudeCodeRAG → Ollama (qwen3-embedding:4b) → Index HNSW
 # Indexation manuelle (avec progression)
 uv run python scripts/leann-index-progress.py
 
-# Déploiement (skills, rules, MCP)
-bash scripts/deploy.sh --check   # vérifier l'état
-bash scripts/deploy.sh           # déploiement rapide
-bash scripts/deploy.sh --full    # réinstallation complète
+# Déploiement (pipx, HNSW rebuild, skills, rules, hooks, MCP)
+bash scripts/deploy.sh --check   # vérifier l'état (inclut freshness .so)
+bash scripts/deploy.sh           # quick: rebuild HNSW si .venv plus récent
+bash scripts/deploy.sh --full    # réinstallation complète (pipx + inject)
 
 # Tests
 uv run pytest -m "not slow and not openai" -x
@@ -55,6 +56,14 @@ uv run pytest -m "not slow and not openai" -x
 ruff format && ruff check --fix
 ```
 
+## Hooks
+
+Le hook `SessionStart` est configuré par projet dans `.claude/settings.local.json` (gitignored) :
+- **Déclencheur** : démarrage de chaque session Claude Code
+- **Script** : `~/.leann/hooks/session-start.sh` → `scripts/leann-session-start.py` (via `uv run`)
+- **Rôle** : report delta uniquement (sessions non indexées), suggère `/init-context`
+- **Déployé par** : `deploy.sh` (`install_hooks`) ou `scripts/leann-whitelist.py add`
+
 ## Configuration
 
 - **Ollama** : Flash Attention configurée dans `/etc/systemd/system/ollama.service.d/override.conf`
@@ -62,6 +71,7 @@ ruff format && ruff check --fix
 - **Index** : `~/.leann/indexes/claude-code-sessions/`
 - **Manifest** : `indexed_sessions.json` (tracking mtime + lines par session)
 - **MCP server** : `leann_mcp` installé via pipx (editable)
+- **Hooks** : `~/.leann/hooks/session-start.sh` (partagé entre projets)
 
 ## Index LEANN
 
