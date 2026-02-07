@@ -56,12 +56,14 @@ class ClaudeCodeReader(BaseReader):
                        (default: ~/.claude/projects).
             max_count: Maximum number of sessions to process (-1 = all).
             include_metadata: Include metadata in documents (default True).
+            include_header: Prepend metadata header to text (default True).
             project_filter: Only process projects whose name contains this string.
             exclude_sessions: Set of session IDs to skip.
         """
         base_dirs = kwargs.get("base_dirs") or [str(Path.home() / ".claude" / "projects")]
         max_count: int = kwargs.get("max_count", -1)
         include_metadata: bool = kwargs.get("include_metadata", True)
+        self._include_header: bool = kwargs.get("include_header", True)
         project_filter: str | None = kwargs.get("project_filter")
         exclude_sessions: set[str] = set(kwargs.get("exclude_sessions") or [])
 
@@ -287,16 +289,6 @@ class ClaudeCodeReader(BaseReader):
                 except (ValueError, TypeError):
                     date_str = ts[:10] if len(ts) >= 10 else ts
 
-            # Build header with metadata for implicit semantic filtering
-            header_parts = []
-            if project_name:
-                header_parts.append(f"Project: {project_name}")
-            if branch:
-                header_parts.append(f"Branch: {branch}")
-            if date_str:
-                header_parts.append(date_str)
-            header = " | ".join(header_parts)
-
             # Build text content
             assistant_text = "\n".join(turn["parts"])
             tools_line = ""
@@ -304,9 +296,19 @@ class ClaudeCodeReader(BaseReader):
                 unique_tools = list(dict.fromkeys(turn["tools"]))  # dedupe, preserve order
                 tools_line = f"\n[Tools: {', '.join(unique_tools)}]"
 
-            text = (
-                f"{header}\n[User]: {turn['user_text']}\n[Assistant]: {assistant_text}{tools_line}"
-            )
+            # Optionally prepend metadata header for implicit semantic filtering
+            if self._include_header:
+                header_parts = []
+                if project_name:
+                    header_parts.append(f"Project: {project_name}")
+                if branch:
+                    header_parts.append(f"Branch: {branch}")
+                if date_str:
+                    header_parts.append(date_str)
+                header = " | ".join(header_parts)
+                text = f"{header}\n[User]: {turn['user_text']}\n[Assistant]: {assistant_text}{tools_line}"
+            else:
+                text = f"[User]: {turn['user_text']}\n[Assistant]: {assistant_text}{tools_line}"
 
             metadata = {}
             if include_metadata:

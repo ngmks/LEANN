@@ -114,6 +114,11 @@ class ClaudeCodeRAG(BaseRAGExample):
             default=128,
             help="Text chunk overlap in tokens (default: 128)",
         )
+        cc_group.add_argument(
+            "--no-header",
+            action="store_true",
+            help="Omit metadata header from passage text (metadata still in structured fields)",
+        )
 
     # ------------------------------------------------------------------
     # Data loading
@@ -131,6 +136,7 @@ class ClaudeCodeRAG(BaseRAGExample):
             base_dirs=args.session_dirs,
             max_count=args.max_items,
             include_metadata=True,
+            include_header=not args.no_header,
             project_filter=args.project_filter,
             exclude_sessions=set(args.exclude_session or []),
         )
@@ -248,6 +254,7 @@ class ClaudeCodeRAG(BaseRAGExample):
         documents = reader.load_data(
             base_dirs=args.session_dirs,
             include_metadata=True,
+            include_header=not args.no_header,
             project_filter=args.project_filter,
             exclude_sessions=exclude,
         )
