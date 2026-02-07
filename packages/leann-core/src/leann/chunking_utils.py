@@ -168,9 +168,31 @@ CODE_EXTENSIONS = {
     ".bash": "bash",
     # Functional
     ".hs": "haskell",
+    ".ml": "ocaml",
+    ".mli": "ocaml",
+    ".clj": "clojure",
+    ".cljs": "clojure",
+    ".cljc": "clojure",
+    # Web
+    ".html": "html",
+    ".htm": "html",
+    ".css": "css",
+    ".vue": "vue",
+    ".svelte": "svelte",
+    # Config / Data
+    ".json": "json",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".toml": "toml",
+    ".xml": "xml",
     # Other
+    ".nim": "nim",
+    ".erl": "erlang",
+    ".hrl": "erlang",
     ".swift": "swift",
     ".sql": "sql",
+    # Note: make, cmake, dockerfile use filenames (Makefile, Dockerfile,
+    # CMakeLists.txt) not extensions — not supported by Path().suffix lookup.
 }
 
 

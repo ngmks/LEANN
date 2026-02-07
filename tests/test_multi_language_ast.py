@@ -193,6 +193,216 @@ class Calculator {
   }
 }
 """,
+    "zig": """\
+const Calculator = struct {
+    fn add(a: i32, b: i32) i32 {
+        return a + b;
+    }
+
+    fn subtract(a: i32, b: i32) i32 {
+        return a - b;
+    }
+};
+""",
+    "nim": """\
+type Calculator = object
+
+proc add(a, b: int): int =
+  return a + b
+
+proc subtract(a, b: int): int =
+  return a - b
+""",
+    "perl": """\
+package Calculator;
+
+sub add {
+    my ($a, $b) = @_;
+    return $a + $b;
+}
+
+sub subtract {
+    my ($a, $b) = @_;
+    return $a - $b;
+}
+""",
+    "r": """\
+Calculator <- list(
+  add = function(a, b) {
+    return(a + b)
+  },
+
+  subtract = function(a, b) {
+    return(a - b)
+  }
+)
+""",
+    "julia": """\
+struct Calculator end
+
+function add(c::Calculator, a, b)
+    return a + b
+end
+
+function subtract(c::Calculator, a, b)
+    return a - b
+end
+""",
+    "dart": """\
+class Calculator {
+  int add(int a, int b) {
+    return a + b;
+  }
+
+  int subtract(int a, int b) {
+    return a - b;
+  }
+}
+""",
+    "elixir": """\
+defmodule Calculator do
+  def add(a, b) do
+    a + b
+  end
+
+  def subtract(a, b) do
+    a - b
+  end
+end
+""",
+    "erlang": """\
+-module(calculator).
+-export([add/2, subtract/2]).
+
+add(A, B) ->
+    A + B.
+
+subtract(A, B) ->
+    A - B.
+""",
+    "haskell": """\
+module Calculator where
+
+add :: Int -> Int -> Int
+add a b = a + b
+
+subtract :: Int -> Int -> Int
+subtract a b = a - b
+""",
+    "ocaml": """\
+let add a b = a + b
+
+let subtract a b = a - b
+""",
+    "clojure": """\
+(ns calculator)
+
+(defn add [a b]
+  (+ a b))
+
+(defn subtract [a b]
+  (- a b))
+""",
+    "html": """\
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Calculator</title>
+</head>
+<body>
+    <div class="calculator">
+        <input type="text" id="result">
+    </div>
+</body>
+</html>
+""",
+    "css": """\
+.calculator {
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+}
+
+.calculator input {
+    font-size: 16px;
+    margin: 5px 0;
+}
+""",
+    "vue": """\
+<template>
+  <div class="calculator">
+    <input v-model="result" />
+  </div>
+</template>
+
+<script>
+export default {
+  data() {
+    return {
+      result: 0
+    }
+  }
+}
+</script>
+""",
+    "svelte": """\
+<script>
+  let result = 0;
+
+  function add(a, b) {
+    return a + b;
+  }
+</script>
+
+<div class="calculator">
+  <input bind:value={result} />
+</div>
+""",
+    "sql": """\
+CREATE TABLE calculator (
+    id INT PRIMARY KEY,
+    value INT
+);
+
+SELECT a + b AS result
+FROM numbers;
+""",
+    "json": """\
+{
+    "name": "leann",
+    "version": "1.0",
+    "dependencies": {
+        "numpy": ">=1.0",
+        "faiss": ">=1.7"
+    }
+}
+""",
+    "yaml": """\
+name: leann
+version: "1.0"
+dependencies:
+  numpy: ">=1.0"
+  faiss: ">=1.7"
+""",
+    "toml": """\
+[project]
+name = "leann"
+version = "1.0"
+
+[project.dependencies]
+numpy = ">=1.0"
+faiss = ">=1.7"
+""",
+    "xml": """\
+<project>
+  <name>leann</name>
+  <version>1.0</version>
+  <dependencies>
+    <dep name="numpy">1.0</dep>
+    <dep name="faiss">1.7</dep>
+  </dependencies>
+</project>
+""",
 }
 
 # Keywords that should appear in chunk output, per language
@@ -213,6 +423,26 @@ EXPECTED_KEYWORDS: dict[str, list[str]] = {
     "php": ["class Calculator", "function add", "function subtract"],
     "lua": ["Calculator", "function", "add", "subtract"],
     "scala": ["class Calculator", "def add", "def subtract"],
+    "zig": ["Calculator", "fn add", "fn subtract"],
+    "nim": ["Calculator", "proc add", "proc subtract"],
+    "perl": ["Calculator", "sub add", "sub subtract"],
+    "r": ["Calculator", "function", "add", "subtract"],
+    "julia": ["Calculator", "function add", "function subtract"],
+    "dart": ["class Calculator", "int add", "int subtract"],
+    "elixir": ["Calculator", "def add", "def subtract"],
+    "erlang": ["calculator", "add", "subtract"],
+    "haskell": ["Calculator", "add", "subtract"],
+    "ocaml": ["let add", "let subtract"],
+    "clojure": ["defn add", "defn subtract"],
+    "html": ["<html>", "<div", "calculator"],
+    "css": [".calculator", "display", "padding"],
+    "vue": ["<template>", "calculator"],
+    "svelte": ["<script>", "function add"],
+    "sql": ["CREATE TABLE", "calculator"],
+    "json": ["leann", "dependencies", "numpy"],
+    "yaml": ["leann", "dependencies", "numpy"],
+    "toml": ["project", "leann", "dependencies"],
+    "xml": ["<project>", "leann", "numpy"],
 }
 
 
@@ -234,7 +464,14 @@ class TestParserInstantiation:
 
     def test_aliases_resolve_same(self):
         """Aliases like 'golang'/'go' should produce equivalent builders."""
-        alias_pairs = [("go", "golang"), ("csharp", "c_sharp"), ("cpp", "c++"), ("bash", "shell")]
+        alias_pairs = [
+            ("go", "golang"),
+            ("csharp", "c_sharp"),
+            ("cpp", "c++"),
+            ("bash", "shell"),
+            ("typescript", "tsx"),
+            ("javascript", "jsx"),
+        ]
         for canonical, alias in alias_pairs:
             b1 = ASTChunkBuilder(
                 max_chunk_size=500, language=canonical, metadata_template="default"
@@ -395,6 +632,44 @@ class TestAncestorDetection:
         combined = " ".join(chunk.get("content", chunk.get("text", "")) for chunk in chunks)
         assert "class Calculator" in combined
 
+    def test_c_ancestors(self):
+        """C: functions and structs should have struct_specifier ancestor."""
+        builder = ASTChunkBuilder(max_chunk_size=50, language="c", metadata_template="default")
+        chunks = builder.chunkify(
+            CODE_SAMPLES["c"],
+            chunk_expansion=True,
+            repo_level_metadata={"filepath": "calc.c"},
+        )
+        combined = " ".join(chunk.get("content", chunk.get("text", "")) for chunk in chunks)
+        assert "struct Calculator" in combined
+
+    def test_cpp_ancestors(self):
+        """C++: methods inside class should have class_specifier ancestor."""
+        builder = ASTChunkBuilder(max_chunk_size=50, language="cpp", metadata_template="default")
+        chunks = builder.chunkify(
+            CODE_SAMPLES["cpp"],
+            chunk_expansion=True,
+            repo_level_metadata={"filepath": "calc.cpp"},
+        )
+        combined = " ".join(chunk.get("content", chunk.get("text", "")) for chunk in chunks)
+        assert "class Calculator" in combined
+
+    @pytest.mark.parametrize(
+        "language",
+        ["javascript", "csharp", "kotlin", "swift", "php", "scala", "bash", "lua"],
+    )
+    def test_expansion_produces_chunks(self, language):
+        """chunk_expansion=True should produce non-empty chunks for each language."""
+        builder = ASTChunkBuilder(max_chunk_size=50, language=language, metadata_template="default")
+        chunks = builder.chunkify(
+            CODE_SAMPLES[language],
+            chunk_expansion=True,
+            repo_level_metadata={"filepath": f"test.{language}"},
+        )
+        assert len(chunks) > 0, f"No chunks with expansion for {language}"
+        combined = " ".join(chunk.get("content", chunk.get("text", "")) for chunk in chunks)
+        assert len(combined.strip()) > 0, f"Empty expanded chunks for {language}"
+
     def test_ancestor_node_types_is_frozenset(self):
         """ANCESTOR_NODE_TYPES should be immutable."""
         assert isinstance(ANCESTOR_NODE_TYPES, frozenset)
@@ -425,4 +700,192 @@ class TestCodeExtensions:
         assert get_language_from_extension("test.sh") == "bash"
         assert get_language_from_extension("test.ts") == "typescript"
         assert get_language_from_extension("test.js") == "javascript"
+        assert get_language_from_extension("test.nim") == "nim"
+        assert get_language_from_extension("test.erl") == "erlang"
+        assert get_language_from_extension("test.ml") == "ocaml"
+        assert get_language_from_extension("test.clj") == "clojure"
+        assert get_language_from_extension("test.html") == "html"
+        assert get_language_from_extension("test.css") == "css"
+        assert get_language_from_extension("test.vue") == "vue"
+        assert get_language_from_extension("test.svelte") == "svelte"
+        assert get_language_from_extension("config.json") == "json"
+        assert get_language_from_extension("config.yaml") == "yaml"
+        assert get_language_from_extension("config.yml") == "yaml"
+        assert get_language_from_extension("config.toml") == "toml"
+        assert get_language_from_extension("config.xml") == "xml"
         assert get_language_from_extension("test.unknown") is None
+
+
+class TestMalformedCodeResilience:
+    """Verify ASTChunkBuilder handles malformed/poorly formatted code without crashing."""
+
+    def test_empty_code(self):
+        """Empty string should produce chunks without crashing."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="python", metadata_template="default")
+        chunks = builder.chunkify("")
+        assert isinstance(chunks, list)
+
+    def test_whitespace_only(self):
+        """Whitespace-only code should produce chunks without crashing."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="python", metadata_template="default")
+        chunks = builder.chunkify("   \n\n\t\t\n   ")
+        assert isinstance(chunks, list)
+
+    def test_syntax_error_python(self):
+        """Python with syntax errors should chunk without crashing."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="python", metadata_template="default")
+        code = """\
+class BrokenClass(
+    def nested_function():
+        return 42
+"""
+        chunks = builder.chunkify(code)
+        assert len(chunks) > 0
+        combined = " ".join(chunk.get("content", chunk.get("text", "")) for chunk in chunks)
+        assert "return 42" in combined
+
+    def test_syntax_error_javascript(self):
+        """JavaScript with missing braces should chunk without crashing."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="javascript", metadata_template="default")
+        code = """\
+function add(a, b) {
+    return a + b;
+
+function subtract(a, b) {
+    return a - b;
+}
+"""
+        chunks = builder.chunkify(code)
+        assert len(chunks) > 0
+        combined = " ".join(chunk.get("content", chunk.get("text", "")) for chunk in chunks)
+        assert "return" in combined
+
+    def test_syntax_error_java(self):
+        """Java with unclosed class should chunk without crashing."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="java", metadata_template="default")
+        code = """\
+public class Broken {
+    public int add(int a, int b) {
+        return a + b;
+    }
+"""
+        chunks = builder.chunkify(code)
+        assert len(chunks) > 0
+
+    @pytest.mark.parametrize(
+        "language,code",
+        [
+            ("python", "def foo("),
+            ("java", "class Foo {"),
+            ("rust", "fn main() {"),
+            ("go", "func main() {"),
+            ("typescript", "class Foo {"),
+            ("c", "int main() {"),
+        ],
+    )
+    def test_incomplete_statements(self, language, code):
+        """Incomplete statements should chunk without crashing."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language=language, metadata_template="default")
+        chunks = builder.chunkify(code)
+        assert isinstance(chunks, list)
+        assert len(chunks) > 0
+
+    def test_minified_javascript(self):
+        """Minified JS (valid but ugly) should chunk correctly."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="javascript", metadata_template="default")
+        code = 'class C{add(a,b){return a+b}subtract(a,b){return a-b}}'
+        chunks = builder.chunkify(code)
+        assert len(chunks) > 0
+        combined = " ".join(chunk.get("content", chunk.get("text", "")) for chunk in chunks)
+        assert "return" in combined
+
+    def test_no_indentation_python(self):
+        """Python with broken indentation (syntax error) should not crash."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="python", metadata_template="default")
+        code = """\
+class Calculator:
+def add(self, a, b):
+return a + b
+"""
+        chunks = builder.chunkify(code)
+        assert isinstance(chunks, list)
+        assert len(chunks) > 0
+
+    def test_mixed_valid_invalid_code(self):
+        """File with some valid and some broken code should chunk the valid parts."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="python", metadata_template="default")
+        code = """\
+def valid_function():
+    return 42
+
+class @@@ broken
+
+def another_valid():
+    return 99
+"""
+        chunks = builder.chunkify(code)
+        assert len(chunks) > 0
+        combined = " ".join(chunk.get("content", chunk.get("text", "")) for chunk in chunks)
+        assert "return 42" in combined
+        assert "return 99" in combined
+
+    def test_syntax_error_with_expansion(self):
+        """Syntax errors with chunk_expansion=True should not crash."""
+        builder = ASTChunkBuilder(max_chunk_size=30, language="python", metadata_template="default")
+        code = """\
+class Broken(:
+    def method(self):
+        return 1
+"""
+        chunks = builder.chunkify(
+            code,
+            chunk_expansion=True,
+            repo_level_metadata={"filepath": "broken.py"},
+        )
+        assert isinstance(chunks, list)
+        assert len(chunks) > 0
+
+    def test_syntax_error_metadata_intact(self):
+        """Metadata fields should be present even for malformed code."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="python", metadata_template="default")
+        code = "def incomplete("
+        chunks = builder.chunkify(code, repo_level_metadata={"filepath": "bad.py"})
+        assert len(chunks) > 0
+        for chunk in chunks:
+            meta = chunk.get("metadata", {})
+            assert "chunk_size" in meta
+            assert "start_line_no" in meta
+            assert "end_line_no" in meta
+
+    def test_garbage_input(self):
+        """Random non-code characters should not crash the chunker."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="python", metadata_template="default")
+        chunks = builder.chunkify("@#$%^&*()!~`|\\")
+        assert isinstance(chunks, list)
+        assert len(chunks) > 0
+
+    def test_unicode_identifiers(self):
+        """Code with unicode identifiers should chunk correctly."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="python", metadata_template="default")
+        code = """\
+class Calculatrice:
+    def ajouter(self, a, b):
+        return a + b
+
+    def soustraire(self, a, b):
+        return a - b
+"""
+        chunks = builder.chunkify(code)
+        assert len(chunks) > 0
+        combined = " ".join(chunk.get("content", chunk.get("text", "")) for chunk in chunks)
+        assert "Calculatrice" in combined
+        assert "ajouter" in combined
+
+    def test_mixed_tabs_and_spaces(self):
+        """Code with mixed tabs and spaces should chunk without crashing."""
+        builder = ASTChunkBuilder(max_chunk_size=500, language="python", metadata_template="default")
+        code = "class Foo:\n\tdef bar(self):\n\t    return 1\n"
+        chunks = builder.chunkify(code)
+        assert len(chunks) > 0
+        combined = " ".join(chunk.get("content", chunk.get("text", "")) for chunk in chunks)
+        assert "return 1" in combined
