@@ -25,16 +25,14 @@ def handle_request(request):
                 "tools": [
                     {
                         "name": "leann_search",
-                        "description": """🔍 Search code using natural language - like having a coding assistant who knows your entire codebase!
+                        "description": """🔍 Search your LEANN indexes using natural language.
 
-🎯 **Perfect for**:
-- "How does authentication work?" → finds auth-related code
-- "Error handling patterns" → locates try-catch blocks and error logic
-- "Database connection setup" → finds DB initialization code
-- "API endpoint definitions" → locates route handlers
-- "Configuration management" → finds config files and usage
+🎯 **Works with any indexed content**: code, Claude Code sessions, chat exports, documents...
 
-💡 **Pro tip**: Use this before making any changes to understand existing patterns and conventions.""",
+💡 **Tips**:
+- Use 'leann_list' first to see available indexes
+- Use 'show_metadata: true' to discover filterable fields
+- Use 'metadata_filter' to narrow results by project, branch, date, etc.""",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -64,6 +62,18 @@ def handle_request(request):
                                     "type": "boolean",
                                     "default": False,
                                     "description": "Include file paths and metadata in search results. Useful for understanding which files contain the results.",
+                                },
+                                "metadata_filter": {
+                                    "type": "object",
+                                    "description": (
+                                        "Filter results by metadata fields. "
+                                        "Use show_metadata=true first to discover available fields for an index. "
+                                        'Format: {"field": {"op": value}}. '
+                                        "Ops: ==, !=, <, >, in, not_in, contains, starts_with. "
+                                        "All conditions are ANDed. "
+                                        'Ex: {"project_name": {"==": "my-app"}, '
+                                        '"git_branch": {"in": ["main", "dev"]}}'
+                                    ),
                                 },
                             },
                             "required": ["index_name", "query"],
@@ -111,6 +121,8 @@ def handle_request(request):
                 ]
                 if args.get("show_metadata", False):
                     cmd.append("--show-metadata")
+                if args.get("metadata_filter"):
+                    cmd.append(f"--metadata-filter={json.dumps(args['metadata_filter'])}")
                 result = subprocess.run(cmd, capture_output=True, text=True)
 
             elif tool_name == "leann_list":

@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import contextlib
+import json
 import os
 import time
 from pathlib import Path
@@ -335,6 +336,13 @@ Examples:
             type=str,
             default=None,
             help="Prompt template to prepend to query for embedding (e.g., 'query: ' for search)",
+        )
+        search_parser.add_argument(
+            "--metadata-filter",
+            type=str,
+            default=None,
+            help='JSON metadata filters: \'{"field": {"op": value}}\'. '
+            "Ops: ==, !=, <, <=, >, >=, in, not_in, contains, starts_with, ends_with.",
         )
 
         # Ask command
@@ -1888,6 +1896,15 @@ Examples:
         if args.embedding_prompt_template:
             provider_options["prompt_template"] = args.embedding_prompt_template
 
+        # Parse metadata filters if provided
+        metadata_filters = None
+        if args.metadata_filter:
+            try:
+                metadata_filters = json.loads(args.metadata_filter)
+            except json.JSONDecodeError as e:
+                print(f"Error: Invalid JSON in --metadata-filter: {e}")
+                return
+
         searcher = LeannSearcher(index_path=index_path)
         results = searcher.search(
             query,
@@ -1897,6 +1914,7 @@ Examples:
             prune_ratio=args.prune_ratio,
             recompute_embeddings=args.recompute_embeddings,
             pruning_strategy=args.pruning_strategy,
+            metadata_filters=metadata_filters,
             provider_options=provider_options if provider_options else None,
         )
 
