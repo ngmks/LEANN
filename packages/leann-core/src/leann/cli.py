@@ -28,32 +28,39 @@ from .settings import (
 
 
 @contextlib.contextmanager
-def suppress_cpp_output(suppress: bool = True):
+def suppress_cpp_output(suppress: bool = True, suppress_stdout: bool = True):
     """Context manager to suppress C++ stdout/stderr output from FAISS/HNSW.
 
     This redirects file descriptors at the OS level to suppress native C++ output
     that cannot be controlled via Python's logging framework.
+
+    When suppress_stdout=False, only stderr is redirected.  This is needed when
+    the caller writes structured output (e.g. JSON) to stdout: Python buffers
+    sys.stdout internally (~8 KB) and auto-flushes to the OS fd.  If fd 1 points
+    to /dev/null at that moment the data is silently lost.
     """
     if not suppress:
         yield
         return
 
     # Save original file descriptors
-    old_stdout_fd = os.dup(1)
+    old_stdout_fd = os.dup(1) if suppress_stdout else None
     old_stderr_fd = os.dup(2)
 
     try:
         # Open /dev/null for writing
         devnull = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(devnull, 1)  # Redirect stdout
+        if suppress_stdout:
+            os.dup2(devnull, 1)  # Redirect stdout
         os.dup2(devnull, 2)  # Redirect stderr
         os.close(devnull)
         yield
     finally:
         # Restore original file descriptors
-        os.dup2(old_stdout_fd, 1)
+        if old_stdout_fd is not None:
+            os.dup2(old_stdout_fd, 1)
+            os.close(old_stdout_fd)
         os.dup2(old_stderr_fd, 2)
-        os.close(old_stdout_fd)
         os.close(old_stderr_fd)
 
 
@@ -343,6 +350,12 @@ Examples:
             default=None,
             help='JSON metadata filters: \'{"field": {"op": value}}\'. '
             "Ops: ==, !=, <, <=, >, >=, in, not_in, contains, starts_with, ends_with.",
+        )
+        search_parser.add_argument(
+            "--json",
+            action="store_true",
+            dest="json_output",
+            help="Output results as JSON (includes full text and all metadata)",
         )
 
         # Ask command
@@ -1825,7 +1838,8 @@ Examples:
                     if match["is_current"]
                     else f"project '{match['project_path'].name}'"
                 )
-                print(f"Using index '{index_name}' from {project_info}")
+                if not getattr(args, "json_output", False):
+                    print(f"Using index '{index_name}' from {project_info}")
             else:
                 # Multiple matches found
                 if args.non_interactive:
@@ -1883,7 +1897,8 @@ Examples:
                                 if match["is_current"]
                                 else f"project '{match['project_path'].name}'"
                             )
-                            print(f"Using index '{index_name}' from {project_info}")
+                            if not getattr(args, "json_output", False):
+                                print(f"Using index '{index_name}' from {project_info}")
                         else:
                             print("Invalid choice. Aborting search.")
                             return
@@ -1917,6 +1932,23 @@ Examples:
             metadata_filters=metadata_filters,
             provider_options=provider_options if provider_options else None,
         )
+
+        if args.json_output:
+            output = {
+                "query": query,
+                "index_name": index_name,
+                "results": [
+                    {
+                        "id": r.id,
+                        "score": float(r.score),
+                        "text": r.text,
+                        "metadata": r.metadata,
+                    }
+                    for r in results
+                ],
+            }
+            print(json.dumps(output, ensure_ascii=False))
+            return
 
         print(f"Search results for '{query}' (top {len(results)}):")
         for i, result in enumerate(results, 1):
@@ -2132,7 +2164,8 @@ Examples:
             with suppress_cpp_output(suppress):
                 await self.build_index(args)
         elif args.command == "search":
-            with suppress_cpp_output(suppress):
+            json_mode = getattr(args, "json_output", False)
+            with suppress_cpp_output(suppress, suppress_stdout=not json_mode):
                 await self.search_documents(args)
         elif args.command == "ask":
             with suppress_cpp_output(suppress):

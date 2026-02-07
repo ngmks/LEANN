@@ -31,7 +31,7 @@ def handle_request(request):
 
 💡 **Tips**:
 - Use 'leann_list' first to see available indexes
-- Use 'show_metadata: true' to discover filterable fields
+- Results always include full text and all metadata
 - Use 'metadata_filter' to narrow results by project, branch, date, etc.""",
                         "inputSchema": {
                             "type": "object",
@@ -58,16 +58,11 @@ def handle_request(request):
                                     "maximum": 128,
                                     "description": "Search complexity level. Use 16-32 for fast searches (recommended), 64+ for higher precision when needed.",
                                 },
-                                "show_metadata": {
-                                    "type": "boolean",
-                                    "default": False,
-                                    "description": "Include file paths and metadata in search results. Useful for understanding which files contain the results.",
-                                },
                                 "metadata_filter": {
                                     "type": "object",
                                     "description": (
                                         "Filter results by metadata fields. "
-                                        "Use show_metadata=true first to discover available fields for an index. "
+                                        "Check result metadata fields to discover available filter keys. "
                                         'Format: {"field": {"op": value}}. '
                                         "Ops: ==, !=, <, >, in, not_in, contains, starts_with. "
                                         "All conditions are ANDed. "
@@ -118,9 +113,8 @@ def handle_request(request):
                     f"--top-k={args.get('top_k', 5)}",
                     f"--complexity={args.get('complexity', 32)}",
                     "--non-interactive",
+                    "--json",
                 ]
-                if args.get("show_metadata", False):
-                    cmd.append("--show-metadata")
                 if args.get("metadata_filter"):
                     cmd.append(f"--metadata-filter={json.dumps(args['metadata_filter'])}")
                 result = subprocess.run(cmd, capture_output=True, text=True)
