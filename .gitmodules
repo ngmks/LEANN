@@ -16,4 +16,4 @@
 	url = https://github.com/zeromq/libzmq.git
 [submodule "packages/astchunk-leann"]
 	path = packages/astchunk-leann
-	url = https://github.com/yichuan-w/astchunk-leann.git
+	url = https://github.com/ngmks/astchunk-leann.git
