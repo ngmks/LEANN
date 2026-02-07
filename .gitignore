@@ -21,6 +21,7 @@ demo/experiment_results/**/*.json
 *.png
 !.vscode/*.json
 *.sh
+!apps/claude_code_data/**/*.sh
 *.txt
 !CMakeLists.txt
 !llms.txt
