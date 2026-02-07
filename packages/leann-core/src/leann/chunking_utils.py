@@ -127,15 +127,50 @@ def validate_chunk_token_limits(chunks: list[str], max_tokens: int = 512) -> tup
     return validated_chunks, num_truncated
 
 
-# Code file extensions supported by astchunk
+# Code file extensions supported by astchunk (maps extension -> language name).
+# Language names must match keys in astchunk.LANGUAGE_MAP.
 CODE_EXTENSIONS = {
+    # Original languages
     ".py": "python",
     ".java": "java",
     ".cs": "csharp",
     ".ts": "typescript",
     ".tsx": "typescript",
-    ".js": "typescript",
-    ".jsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    # Systems languages
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hpp": "cpp",
+    ".rs": "rust",
+    ".go": "go",
+    ".zig": "zig",
+    # JVM / .NET
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".scala": "scala",
+    # Scripting languages
+    ".rb": "ruby",
+    ".php": "php",
+    ".lua": "lua",
+    ".r": "r",
+    ".jl": "julia",
+    ".dart": "dart",
+    ".ex": "elixir",
+    ".exs": "elixir",
+    ".pl": "perl",
+    ".pm": "perl",
+    # Shell
+    ".sh": "bash",
+    ".bash": "bash",
+    # Functional
+    ".hs": "haskell",
+    # Other
+    ".swift": "swift",
+    ".sql": "sql",
 }
 
 
@@ -368,13 +403,7 @@ def create_text_chunks(
 
     local_code_extensions = CODE_EXTENSIONS.copy()
     if code_file_extensions:
-        ext_mapping = {
-            ".py": "python",
-            ".java": "java",
-            ".cs": "c_sharp",
-            ".ts": "typescript",
-            ".tsx": "typescript",
-        }
+        ext_mapping = CODE_EXTENSIONS
         for ext in code_file_extensions:
             if ext.lower() not in local_code_extensions:
                 if ext.lower() in ext_mapping:
