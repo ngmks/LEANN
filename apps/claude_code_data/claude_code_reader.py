@@ -120,7 +120,7 @@ class ClaudeCodeReader(BaseReader):
 
                 # Include subagent files if requested
                 if self.include_agents:
-                    agents_dir = jsonl_path.parent / "subagents"
+                    agents_dir = jsonl_path.parent / jsonl_path.stem / "subagents"
                     if agents_dir.is_dir():
                         for agent_file in sorted(agents_dir.glob("agent-*.jsonl")):
                             agent_entries = self._read_jsonl(agent_file)
@@ -277,7 +277,7 @@ class ClaudeCodeReader(BaseReader):
         # Convert turns to Documents
         docs: list[Document] = []
         project_name = session_meta.get("project_name", "")
-        for turn in turns:
+        for turn_id, turn in enumerate(turns):
             branch = turn.get("git_branch", "")
             ts = turn.get("timestamp", "")
             # Format timestamp to date only if possible
@@ -314,6 +314,7 @@ class ClaudeCodeReader(BaseReader):
             if include_metadata:
                 metadata = {
                     "session_id": session_id,
+                    "turn_id": turn_id,
                     "project_name": project_name,
                     "git_branch": branch,
                     "timestamp": ts,

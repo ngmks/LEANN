@@ -36,6 +36,7 @@ from leann.registry import register_index, register_project_directory
 # Metadata keys to preserve through chunking
 _EXTRA_METADATA_KEYS = [
     "session_id",
+    "turn_id",
     "project_name",
     "git_branch",
     "timestamp",
