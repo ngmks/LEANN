@@ -1,0 +1,50 @@
+{
+  "name": "prettier",
+  "version": "3.9.0-dev",
+  "description": "Prettier is an opinionated code formatter",
+  "bin": "./bin/prettier.cjs",
+  "repository": "prettier/prettier",
+  "funding": "https://github.com/prettier/prettier?sponsor=1",
+  "homepage": "https://prettier.io",
+  "author": "James Long",
+  "type": "module",
+  "license": "MIT",
+  "main": "./src/index.cjs",
+  "browser": "./standalone.js",
+  "unpkg": "./standalone.js",
+  "imports": {
+    "#universal": {
+      "browser": "./src/universal/index.browser.js",
+      "default": "./src/universal/index.js"
+    },
+    "#universal/*": {
+      "browser": "./src/universal/*.browser.js",
+      "default": "./src/universal/*.js"
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "require": "./src/index.cjs",
+      "default": "./src/index.js"
+    },
+    "./standalone": "./src/standalone.js",
+    "./plugins/*": "./src/plugins/*.js",
+    "./*": "./*"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "index.js",
+    "standalone.js",
+    "src",
+    "bin"
+  ],
+  "dependencies": {
+    "@angular/compiler": "21.1.1",
+    "@babel/code-frame": "8.0.0-rc.1",
+    "@babel/parser": "8.0.0-rc.1",
+    "@babel/types": "8.0.0-rc.1",
+    "@glimmer/syntax": "0.95.0",
+    "@prettier/cli": "0.10.0",
